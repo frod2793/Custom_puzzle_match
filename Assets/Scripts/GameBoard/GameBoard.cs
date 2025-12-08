@@ -7,25 +7,33 @@ using System.Text;
 using DG.Tweening;
 using Match3.UI;
 using System;
+using System.Threading;
 
 namespace Match3
 {
     public class GameBoard : MonoBehaviour
     {
+        /// <summary>
+        /// 보드의 논리적 회전 상태를 나타냅니다. 중력 방향에 영향을 줍니다.
+        /// </summary>
         public enum BoardRotation { Up = 0, Right = 1, Down = 2, Left = 3 }
 
-        [Header("Theme & Data")]
+        [Header("테마 및 레벨 데이터")]
         [SerializeField] private LevelData m_levelData;
         [SerializeField] private TileThemeData m_tileTheme;
 
-        [Header("Scene Objects")]
+        [Header("씬 오브젝트 및 프리팹")]
         [SerializeField] private GameObject m_tilePrefab;
         [SerializeField] private Transform m_gridTransform;
         [SerializeField] private Transform m_tileContainer;
 
+        [Header("리필 애니메이션 속도")]
+        [SerializeField] private float m_refillMoveDuration = 0.6f;
+        [SerializeField] private float m_refillMaxStaggerDelay = 0.4f;
+
         private BoardRotation m_currentRotation = BoardRotation.Up;
-        private bool m_isWaitingForRefill = false;
-        private bool m_isProcessingMove = false;
+        private bool m_isWaitingForRefill;
+        private bool m_isProcessingMove;
         
         private Tile m_selectedTile;
         private Vector2 m_swipeStartPosition;
@@ -33,10 +41,13 @@ namespace Match3
 
         private IGridManager m_gridManager;
         private TileFactory m_tileFactory;
-        private Dictionary<Vector2Int, Tile> m_tileObjects = new Dictionary<Vector2Int, Tile>();
+        private readonly Dictionary<Vector2Int, Tile> m_tileObjects = new Dictionary<Vector2Int, Tile>();
 
         private Camera m_mainCamera;
         private Action m_onRotateButtonPressedAction;
+        private readonly RaycastHit2D[] m_raycastHits = new RaycastHit2D[10];
+
+        #region Unity 라이프사이클
 
         private void Awake()
         {
@@ -52,7 +63,7 @@ namespace Match3
             }
             if (m_tileContainer == null)
             {
-                Debug.LogError("<b>[Critical Error]</b> 'Tile Container' is not assigned!", this);
+                Debug.LogError("<b>[치명적 오류]</b> 'Tile Container'가 할당되지 않았습니다!", this);
                 return;
             }
             if (m_gridTransform == null)
@@ -63,7 +74,7 @@ namespace Match3
             InitializeGrid();
             if (m_gridManager == null)
             {
-                Debug.LogError("GridManager failed to initialize.");
+                Debug.LogError("GridManager 초기화에 실패했습니다.");
                 return;
             }
 
@@ -95,6 +106,10 @@ namespace Match3
             HandleInput();
         }
 
+        #endregion
+
+        #region 초기화
+
         private void InitializeGrid()
         {
             switch (m_levelData.GridType)
@@ -106,7 +121,7 @@ namespace Match3
                     m_gridManager = new HexGridManager();
                     break;
                 default:
-                    Debug.LogError($"Unsupported GridType: {m_levelData.GridType} in {m_levelData.name}");
+                    Debug.LogError($"지원하지 않는 GridType입니다: {m_levelData.GridType} in {m_levelData.name}");
                     return;
             }
             m_gridManager.Initialize(m_levelData);
@@ -126,7 +141,9 @@ namespace Match3
             }
         }
 
-        #region Input Handling
+        #endregion
+
+        #region 입력 처리
 
         private void HandleInput()
         {
@@ -169,9 +186,10 @@ namespace Match3
         private Tile GetTileUnderPointer()
         {
             Vector2 screenPoint = Pointer.current.position.ReadValue();
-            RaycastHit2D[] hits = Physics2D.RaycastAll(m_mainCamera.ScreenToWorldPoint(screenPoint), Vector2.zero);
-            foreach (var hit in hits)
+            int hitCount = Physics2D.RaycastNonAlloc(m_mainCamera.ScreenToWorldPoint(screenPoint), Vector2.zero, m_raycastHits);
+            for (int i = 0; i < hitCount; i++)
             {
+                var hit = m_raycastHits[i];
                 if (hit.collider != null)
                 {
                     var tile = hit.collider.GetComponent<Tile>();
@@ -198,7 +216,7 @@ namespace Match3
 
         #endregion
 
-        #region Game Logic
+        #region 게임 로직 (매치, 스왑, 클리어)
 
         private async UniTaskVoid SwapAndProcessMatchesAsync(Tile tileA, Tile tileB)
         {
@@ -213,7 +231,7 @@ namespace Match3
             else
             {
                 await UniTask.Delay(50);
-                await SwapTilesAsync(tileB, tileA); // Swap back
+                await SwapTilesAsync(tileB, tileA); // 매치 실패 시 원위치
             }
             m_isProcessingMove = false;
         }
@@ -265,7 +283,7 @@ namespace Match3
 
         #endregion
 
-        #region Board Manipulation
+        #region 보드 제어 (회전, 재정렬, 리필)
 
         private async UniTaskVoid RotateBoard()
         {
@@ -373,66 +391,84 @@ namespace Match3
             m_isProcessingMove = false;
         }
 
+        /// <summary>
+        /// 비어있는 모든 타일 슬롯을 채웁니다. 타일은 월드 좌표 기준 위에서 생성되며,
+        /// 보드의 가장 아래쪽에 채워질 타일부터 애니메이션이 시작됩니다.
+        /// </summary>
         private async UniTask RefillBoardAsync()
         {
             var refillTasks = new List<UniTask>();
-            float fallStartOffset = m_gridManager.CellSize * Mathf.Max(m_levelData.GridSize.x, m_levelData.GridSize.y);
-            Vector2Int gravityDir = GetGravityDirection();
-            Vector3 fallDirection = -new Vector3(gravityDir.x, gravityDir.y, 0);
+            var cancellationToken = this.GetCancellationTokenOnDestroy();
 
-            // Determine the axis for delay calculation and find the coordinate range.
-            bool isVerticalGravity = (gravityDir.x == 0);
-            int minCoord, maxCoord;
+            // 1. 비어있는 모든 그리드 위치를 찾습니다.
+            var emptyGridPositions = m_levelData.TilePositions
+                .Where(pos => !m_tileObjects.ContainsKey(pos))
+                .ToList();
 
-            if (m_levelData.TilePositions.Count == 0) return;
-
-            if (isVerticalGravity)
+            if (emptyGridPositions.Count == 0)
             {
-                minCoord = m_levelData.TilePositions.Min(p => p.y);
-                maxCoord = m_levelData.TilePositions.Max(p => p.y);
-            }
-            else
-            {
-                minCoord = m_levelData.TilePositions.Min(p => p.x);
-                maxCoord = m_levelData.TilePositions.Max(p => p.x);
+                return;
             }
 
-            foreach (var pos in m_levelData.TilePositions)
+            // 2. 각 새 타일에 대한 데이터(그리드 위치, 목표 월드 위치) 목록을 생성합니다.
+            var newTileData = emptyGridPositions.Select(gridPos => new
             {
-                if (!m_tileObjects.ContainsKey(pos))
-                {
-                    var targetWorldPos = GetWorldPositionFromGrid(pos.x, pos.y);
-                    var startWorldPos = targetWorldPos + fallDirection * fallStartOffset;
+                GridPos = gridPos,
+                TargetWorldPos = GetWorldPositionFromGrid(gridPos.x, gridPos.y)
+            }).ToList();
 
-                    var newType = GetRandomTileTypeAvoidingInitialMatch(pos);
-                    var newTile = m_tileFactory.Get(startWorldPos, pos, newType);
-                    m_tileObjects[pos] = newTile;
+            // 3. 월드 좌표를 기준으로 애니메이션 지연(staggering)을 위한 수직 범위를 결정합니다.
+            float minY = newTileData.Min(d => d.TargetWorldPos.y);
+            float maxY = newTileData.Max(d => d.TargetWorldPos.y);
+            float verticalRange = maxY - minY;
 
-                    // Calculate a non-negative delay based on the tile's position relative to the gravity direction
-                    // to create a staggered falling effect.
-                    float delaySeconds = 0f;
-                    int currentCoord = isVerticalGravity ? pos.y : pos.x;
+            // 4. 애니메이션 파라미터를 정의합니다.
+            float screenEdgeOffset = m_gridManager.CellSize;
+            float cameraTopY = m_mainCamera.transform.position.y + m_mainCamera.orthographicSize;
 
-                    // Tiles "higher up" (against gravity) should start falling first (less delay).
-                    if (gravityDir.y < 0 || gravityDir.x < 0) // Gravity: Down or Left
-                    {
-                        delaySeconds = (maxCoord - currentCoord) * 0.05f;
-                    }
-                    else // Gravity: Up or Right
-                    {
-                        delaySeconds = (currentCoord - minCoord) * 0.05f;
-                    }
+            foreach (var data in newTileData)
+            {
+                // 5. 시작 위치 계산: 항상 카메라 뷰 '위쪽'.
+                var startWorldPos = new Vector3(data.TargetWorldPos.x, cameraTopY + screenEdgeOffset, data.TargetWorldPos.z);
 
-                    var delayTask = UniTask.Delay(TimeSpan.FromSeconds(delaySeconds));
-                    refillTasks.Add(delayTask.ContinueWith(() => newTile.MoveToAsync(targetWorldPos)));
-                }
+                // 6. 시작 위치에 새 타일을 생성합니다.
+                var newType = GetRandomTileTypeAvoidingInitialMatch(data.GridPos);
+                var newTile = m_tileFactory.Get(startWorldPos, data.GridPos, newType);
+                if (newTile == null) continue;
+
+                m_tileObjects[data.GridPos] = newTile;
+
+                // 7. 지연 시간 계산: Y좌표가 낮은 타일(아래쪽)이 먼저 움직입니다.
+                float delayFactor = (verticalRange > 0.01f) ? (data.TargetWorldPos.y - minY) / verticalRange : 0;
+                float delaySeconds = delayFactor * m_refillMaxStaggerDelay; // 인스펙터 값 사용
+
+                // 8. 애니메이션 작업을 추가합니다.
+                refillTasks.Add(AnimateTileFall(newTile, data.TargetWorldPos, delaySeconds, cancellationToken));
             }
+
             await UniTask.WhenAll(refillTasks);
+        }
+
+        /// <summary>
+        /// 타일 하나를 지정된 위치로 이동시키는 애니메이션을 실행합니다.
+        /// </summary>
+        private async UniTask AnimateTileFall(Tile tile, Vector3 targetPosition, float delay, CancellationToken cancellationToken)
+        {
+            if (delay > 0)
+            {
+                await UniTask.Delay(TimeSpan.FromSeconds(delay), cancellationToken: cancellationToken);
+            }
+
+            if (cancellationToken.IsCancellationRequested) return;
+
+            await tile.transform.DOMove(targetPosition, m_refillMoveDuration) // 인스펙터 값 사용
+                .SetEase(Ease.Linear)
+                .ToUniTask(cancellationToken: cancellationToken);
         }
 
         #endregion
 
-        #region Match Finding
+        #region 매치 찾기
 
         private List<Tile> FindAllMatches()
         {
@@ -523,7 +559,7 @@ namespace Match3
 
         private bool CreatesInitialMatch(Vector2Int pos, TileType type)
         {
-            // Check horizontal
+            // 수평 체크
             Tile r1 = GetTileAt(pos + Vector2Int.right);
             Tile l1 = GetTileAt(pos + Vector2Int.left);
             if (r1 != null && l1 != null && r1.Type == type && l1.Type == type) return true;
@@ -534,7 +570,7 @@ namespace Match3
             Tile l2 = GetTileAt(pos + new Vector2Int(-2, 0));
             if (l1 != null && l2 != null && l1.Type == type && l2.Type == type) return true;
 
-            // Check vertical
+            // 수직 체크
             Tile u1 = GetTileAt(pos + Vector2Int.up);
             Tile d1 = GetTileAt(pos + Vector2Int.down);
             if (u1 != null && d1 != null && u1.Type == type && d1.Type == type) return true;
@@ -550,7 +586,7 @@ namespace Match3
 
         #endregion
 
-        #region Utility & Debug
+        #region 유틸리티 및 디버그
 
         public Tile GetTileAt(Vector2Int pos)
         {
@@ -591,11 +627,11 @@ namespace Match3
         private void PrintBoardState()
         {
             var sb = new StringBuilder();
-            sb.AppendLine("\n<b>--- Current Board State ---</b>");
+            sb.AppendLine("\n<b>--- 현재 보드 상태 ---</b>");
 
             if (m_tileObjects == null || m_tileObjects.Count == 0)
             {
-                sb.AppendLine("Board is empty.");
+                sb.AppendLine("보드가 비어있습니다.");
                 Debug.Log(sb.ToString());
                 return;
             }
