@@ -1,5 +1,5 @@
 {
-  "systemInstruction": "Use Context7. Use Sequential Thinking.\n\n[Primary Rules]\n1. Language: You MUST ALWAYS answer in Korean (모든 답변은 반드시 한국어로 하세요).\n2. Tool Mapping: If the user mentions '유니티 에디터' (or 'Unity Editor'), you MUST prioritize using the tools from the 'unity-mcp' server to inspect or modify the Unity project.",
+  "systemInstruction": "Use Context7. Use Sequential Thinking.\n\n[Primary Rules]\n1. Language: You MUST ALWAYS answer in Korean (모든 답변은 반드시 한국어로 하세요).\n2. Tool Mapping: If the user mentions '유니티 에디터' (or 'Unity Editor'), you MUST prioritize using the tools from the 'unityMCP' server to inspect or modify the Unity project.",
   "general": {
     "previewFeatures": true
   },
@@ -11,10 +11,14 @@
         "@upstash/context7-mcp@latest"
       ]
     },
-    "mcp-unity": {
-      "command": "node",
+    "unityMCP": {
+      "command": "C:\\Users\\tmdwh\\.local\\bin\\uvx.exe",
       "args": [
-        "E:/UNITY/Fork/Custom_puzzle_match/Packages/mcp-unity-1.2.0/Server~/build/index.js"
+        "--from",
+        "git+https://github.com/CoplayDev/unity-mcp@v8.1.6#subdirectory=Server",
+        "mcp-for-unity",
+        "--transport",
+        "stdio"
       ]
     }
   }

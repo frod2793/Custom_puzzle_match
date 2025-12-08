@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 066cf82f8f80d408c856e48fc8f1127b, type: 3}
+  m_Name: vFavorites Data
+  m_EditorClassIdentifier: VFavorites::VFavorites.VFavoritesData
+  pages:
+  - items:
+    - globalId:
+        globalObjectIdString: GlobalObjectId_V1-1-d63b74cda33c3a744a7586f3a413f9e4-2800000-0
+      _typeString: UnityEngine.Texture2D, UnityEngine.CoreModule, Version=0.0.0.0,
+        Culture=neutral, PublicKeyToken=null
+      _obj: {fileID: 2800000, guid: d63b74cda33c3a744a7586f3a413f9e4, type: 3}
+      isSceneGameObject: 0
+      isFolder: 0
+      isAsset: 1
+      _id: 1043937041
+    - globalId:
+        globalObjectIdString: GlobalObjectId_V1-1-869ff0932bc2fd747acd7586f1122dd3-102900000-0
+      _typeString: UnityEditor.DefaultAsset, UnityEditor.CoreModule, Version=0.0.0.0,
+        Culture=neutral, PublicKeyToken=null
+      _obj: {fileID: 102900000, guid: 869ff0932bc2fd747acd7586f1122dd3, type: 3}
+      isSceneGameObject: 0
+      isFolder: 1
+      isAsset: 0
+      _id: 1048365170
+    - globalId:
+        globalObjectIdString: GlobalObjectId_V1-1-befecc851db4da44e9f7ae608b7abfcd-2800000-0
+      _typeString: UnityEngine.Texture2D, UnityEngine.CoreModule, Version=0.0.0.0,
+        Culture=neutral, PublicKeyToken=null
+      _obj: {fileID: 2800000, guid: befecc851db4da44e9f7ae608b7abfcd, type: 3}
+      isSceneGameObject: 0
+      isFolder: 0
+      isAsset: 1
+      _id: 1064322784
+    - globalId:
+        globalObjectIdString: GlobalObjectId_V1-1-d63b74cda33c3a744a7586f3a413f9e4-9940008184385650830-0
+      _typeString: UnityEngine.Sprite, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral,
+        PublicKeyToken=null
+      _obj: {fileID: -8506735889323900786, guid: d63b74cda33c3a744a7586f3a413f9e4, type: 3}
+      isSceneGameObject: 0
+      isFolder: 0
+      isAsset: 1
+      _id: 1063100720
+    - globalId:
+        globalObjectIdString: GlobalObjectId_V1-3-da721abf928ebd64db1705b629bf90fb-11400000-0
+      _typeString: GravitySpinMatch.Data.ThemeData, Assembly-CSharp, Version=0.0.0.0,
+        Culture=neutral, PublicKeyToken=null
+      _obj: {fileID: 11400000, guid: da721abf928ebd64db1705b629bf90fb, type: 2}
+      isSceneGameObject: 0
+      isFolder: 0
+      isAsset: 1
+      _id: 1062836030
+    name: Page 1
+    _id: 1060672715
+  - items: []
+    name: Page 2
+    _id: 0
+  rowScale: 1

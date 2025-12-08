@@ -1,0 +1,283 @@
+fileFormatVersion: 2
+guid: e6599877db758804d92cd2b027ba3788
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -4325854304165338569
+    second: puzzle_base-Photoroom_0
+  - first:
+      213: -3987502730592301565
+    second: puzzle_base-Photoroom_1
+  - first:
+      213: 1341388218030797803
+    second: puzzle_base-Photoroom_2
+  - first:
+      213: 6234459530533475967
+    second: puzzle_base-Photoroom_3
+  - first:
+      213: -2911395342940817306
+    second: puzzle_base-Photoroom_4
+  - first:
+      213: -7937057902494774546
+    second: puzzle_base-Photoroom_5
+  - first:
+      213: 587148017869656147
+    second: puzzle_base-Photoroom_6
+  - first:
+      213: 8706397151245152642
+    second: puzzle_base-Photoroom_7
+  - first:
+      213: -88859178056001619
+    second: puzzle_base-Photoroom_8
+  - first:
+      213: 981165490373181858
+    second: puzzle_base-Photoroom_9
+  - first:
+      213: 7238412790068895581
+    second: puzzle_base-Photoroom_10
+  - first:
+      213: -331711888928480347
+    second: puzzle_base-Photoroom_11
+  - first:
+      213: 1637728600302659566
+    second: puzzle_base-Photoroom_12
+  - first:
+      213: -1962058386432203712
+    second: puzzle_base-Photoroom_13
+  - first:
+      213: -1511886687822352380
+    second: puzzle_base-Photoroom_14
+  - first:
+      213: 3229413535557157241
+    second: puzzle_base-Photoroom_15
+  - first:
+      213: 4433851802608063106
+    second: puzzle_base-Photoroom_16
+  - first:
+      213: -6744515138333848183
+    second: puzzle_base-Photoroom_17
+  - first:
+      213: -7404455680348715456
+    second: puzzle_base-Photoroom_18
+  - first:
+      213: -7928821199358576587
+    second: puzzle_base-Photoroom_19
+  - first:
+      213: 3469950662212774019
+    second: puzzle_base-Photoroom_20
+  - first:
+      213: -6098619775693114244
+    second: puzzle_base-Photoroom_21
+  - first:
+      213: -8505518259084217372
+    second: puzzle_base-Photoroom_22
+  - first:
+      213: -6607040135657827453
+    second: puzzle_base-Photoroom_23
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 450
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: puzzle_base-Photoroom_0
+      rect:
+        serializedVersion: 2
+        x: 79
+        y: 183
+        width: 452
+        height: 452
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 73261220e6a77f3c0800000000000000
+      internalID: -4325854304165338569
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: puzzle_base-Photoroom_1
+      rect:
+        serializedVersion: 2
+        x: 685
+        y: 183
+        width: 524
+        height: 452
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 30e452aa46b89a8c0800000000000000
+      internalID: -3987502730592301565
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: ba7f1b6c98b250341a838474ffec2943
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      puzzle_base-Photoroom_0: -4325854304165338569
+      puzzle_base-Photoroom_1: -3987502730592301565
+      puzzle_base-Photoroom_10: 7238412790068895581
+      puzzle_base-Photoroom_11: -331711888928480347
+      puzzle_base-Photoroom_12: 1637728600302659566
+      puzzle_base-Photoroom_13: -1962058386432203712
+      puzzle_base-Photoroom_14: -1511886687822352380
+      puzzle_base-Photoroom_15: 3229413535557157241
+      puzzle_base-Photoroom_16: 4433851802608063106
+      puzzle_base-Photoroom_17: -6744515138333848183
+      puzzle_base-Photoroom_18: -7404455680348715456
+      puzzle_base-Photoroom_19: -7928821199358576587
+      puzzle_base-Photoroom_2: 1341388218030797803
+      puzzle_base-Photoroom_20: 3469950662212774019
+      puzzle_base-Photoroom_21: -6098619775693114244
+      puzzle_base-Photoroom_22: -8505518259084217372
+      puzzle_base-Photoroom_23: -6607040135657827453
+      puzzle_base-Photoroom_3: 6234459530533475967
+      puzzle_base-Photoroom_4: -2911395342940817306
+      puzzle_base-Photoroom_5: -7937057902494774546
+      puzzle_base-Photoroom_6: 587148017869656147
+      puzzle_base-Photoroom_7: 8706397151245152642
+      puzzle_base-Photoroom_8: -88859178056001619
+      puzzle_base-Photoroom_9: 981165490373181858
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

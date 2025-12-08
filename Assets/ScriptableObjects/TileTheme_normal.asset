@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 293519ba1d3ddc448a4da1d229156c56, type: 3}
+  m_Name: TileTheme_normal
+  m_EditorClassIdentifier: Assembly-CSharp::Match3.TileThemeData
+  m_tileSprites:
+  - Type: 0
+    Sprite: {fileID: -8506735889323900786, guid: d63b74cda33c3a744a7586f3a413f9e4, type: 3}
+  - Type: 1
+    Sprite: {fileID: 8410894248705696185, guid: d63b74cda33c3a744a7586f3a413f9e4, type: 3}
+  - Type: 2
+    Sprite: {fileID: 8500952370780790516, guid: d63b74cda33c3a744a7586f3a413f9e4, type: 3}
+  - Type: 3
+    Sprite: {fileID: -8246695295650224552, guid: d63b74cda33c3a744a7586f3a413f9e4, type: 3}
+  - Type: 4
+    Sprite: {fileID: -6226498286090505678, guid: d63b74cda33c3a744a7586f3a413f9e4, type: 3}
+  - Type: 4
+    Sprite: {fileID: -6226498286090505678, guid: d63b74cda33c3a744a7586f3a413f9e4, type: 3}
