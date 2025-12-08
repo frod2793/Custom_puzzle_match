@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Match3
@@ -6,64 +7,99 @@ namespace Match3
     {
         private readonly GameObject m_tilePrefab;
         private readonly Transform m_parent;
-        private readonly float m_cellSize;
         private readonly TileThemeData m_theme;
         private readonly GameBoard.BoardRotation m_initialRotation;
+        
+        private readonly Vector3 m_tileScale; // 계산된 스케일 캐싱
+
+        private readonly Queue<Tile> m_tilePool = new Queue<Tile>();
 
         public TileFactory(GameObject tilePrefab, Transform parent, float cellSize, TileThemeData theme, GameBoard.BoardRotation initialRotation)
         {
             m_tilePrefab = tilePrefab;
             m_parent = parent;
-            m_cellSize = cellSize;
             m_theme = theme;
             m_initialRotation = initialRotation;
+            
+            m_tileScale = CalculateScale(cellSize); // 생성자에서 스케일 한 번만 계산
         }
 
-        public Tile Create(Vector3 position, Vector2Int gridPosition, TileType type)
+        public Tile Get(Vector3 position, Vector2Int gridPosition, TileType type)
         {
             if (m_tilePrefab == null) { Debug.LogError("Tile Prefab is not provided!"); return null; }
             if (m_theme == null) { Debug.LogError("TileThemeData is missing!"); return null; }
 
-            GameObject tileInstance = Object.Instantiate(m_tilePrefab, position, Quaternion.identity, m_parent);
-            tileInstance.name = $"Tile_{gridPosition.x}_{gridPosition.y}";
+            Tile tileComponent;
+            if (m_tilePool.Count > 0)
+            {
+                tileComponent = m_tilePool.Dequeue();
+                tileComponent.transform.SetPositionAndRotation(position, Quaternion.identity);
+                tileComponent.gameObject.SetActive(true);
+            }
+            else
+            {
+                tileComponent = CreateNewTile(position);
+                if (tileComponent == null) return null;
+            }
 
-            AdjustScale(tileInstance);
+            // 스케일 설정 및 초기화
+            tileComponent.SetOriginalScale(m_tileScale);
+            tileComponent.Initialize(gridPosition, type);
+            
+            tileComponent.name = $"Tile_{gridPosition.x}_{gridPosition.y}";
+            
+            Sprite sprite = m_theme.GetSprite(type);
+            tileComponent.ApplySprite(sprite);
+
+            Quaternion inverseRotation = Quaternion.Euler(0, 0, 90 * (int)m_initialRotation);
+            tileComponent.SetVisualRotation(inverseRotation);
+
+            return tileComponent;
+        }
+
+        public void Release(Tile tile)
+        {
+            if (tile == null) return;
+            
+            tile.gameObject.SetActive(false);
+            m_tilePool.Enqueue(tile);
+        }
+
+        private Tile CreateNewTile(Vector3 position)
+        {
+            GameObject tileInstance = Object.Instantiate(m_tilePrefab, position, Quaternion.identity, m_parent);
             
             Tile tileComponent = tileInstance.GetComponent<Tile>();
             if (tileComponent != null)
             {
-                tileComponent.Initialize(gridPosition, type);
-                
-                Sprite sprite = m_theme.GetSprite(type);
-                tileComponent.ApplySprite(sprite);
-
-                // 타일의 초기 회전값 설정
-                Quaternion inverseRotation = Quaternion.Euler(0, 0, 90 * (int)m_initialRotation);
-                tileComponent.SetVisualRotation(inverseRotation);
-
                 return tileComponent;
             }
-            else
-            {
-                Debug.LogError($"Tile prefab is missing the 'Tile' component.", tileInstance);
-                Object.Destroy(tileInstance);
-                return null;
-            }
+
+            Debug.LogError($"Tile prefab is missing the 'Tile' component.", tileInstance);
+            Object.Destroy(tileInstance);
+            return null;
         }
 
-        private void AdjustScale(GameObject tileInstance)
+        private Vector3 CalculateScale(float cellSize)
         {
-            SpriteRenderer spriteRenderer = tileInstance.GetComponentInChildren<SpriteRenderer>();
-            if (spriteRenderer == null) { return; }
+            if (m_tilePrefab == null) return Vector3.one;
 
-            Sprite originalSprite = m_tilePrefab.GetComponent<SpriteRenderer>()?.sprite;
-            if (originalSprite == null) { return; }
+            SpriteRenderer prefabSpriteRenderer = m_tilePrefab.GetComponentInChildren<SpriteRenderer>();
+            if (prefabSpriteRenderer == null || prefabSpriteRenderer.sprite == null) 
+            {
+                Debug.LogWarning("Prefab does not have a SpriteRenderer with a sprite to calculate scale from. Defaulting to scale one.");
+                return Vector3.one;
+            }
 
-            float spriteWidth = originalSprite.bounds.size.x;
-            if (spriteWidth <= 0) return;
+            float spriteWidth = prefabSpriteRenderer.sprite.bounds.size.x;
+            if (spriteWidth <= 0) 
+            {
+                Debug.LogWarning("Prefab sprite width is zero or negative. Defaulting to scale one.");
+                return Vector3.one;
+            }
 
-            float requiredScale = m_cellSize / spriteWidth;
-            tileInstance.transform.localScale = new Vector3(requiredScale, requiredScale, 1f);
+            float requiredScale = cellSize / spriteWidth;
+            return new Vector3(requiredScale, requiredScale, 1f);
         }
     }
 }

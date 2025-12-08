@@ -9,13 +9,12 @@ namespace Match3
         
         public float CellSize { get; private set; } = 1.0f;
 
-        // 인터페이스와 일치하도록 파라미터를 LevelData로 변경
         public void Initialize(LevelData levelData)
         {
             m_gridSize = levelData.GridSize;
         }
 
-        public Vector3 GetWorldPosition(int x, int y)
+        public Vector3 GetLocalPosition(int x, int y)
         {
             float xOffset = (m_gridSize.x - 1) * CellSize / 2.0f;
             float yOffset = (m_gridSize.y - 1) * CellSize / 2.0f;
@@ -25,6 +24,9 @@ namespace Match3
 
         public Vector2Int GetGridPosition(Vector3 worldPosition)
         {
+            // 이 메서드는 현재 GameBoard에서 직접 사용되지 않으므로,
+            // 만약 사용하게 된다면 worldPosition을 localPosition으로 변환하는 로직이 필요합니다.
+            // 예: Vector3 localPosition = gridTransform.InverseTransformPoint(worldPosition);
             float xOffset = (m_gridSize.x - 1) * CellSize / 2.0f;
             float yOffset = (m_gridSize.y - 1) * CellSize / 2.0f;
 

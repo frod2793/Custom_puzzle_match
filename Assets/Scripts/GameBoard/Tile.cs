@@ -18,6 +18,7 @@ namespace Match3
 
         private SpriteRenderer m_spriteRenderer;
         private Vector3 m_originalScale;
+        private Color m_originalColor;
 
         private const float k_MoveDuration = 0.2f;
         private const float k_SelectAnimDuration = 0.15f;
@@ -26,17 +27,20 @@ namespace Match3
         private void Awake()
         {
             m_spriteRenderer = GetComponent<SpriteRenderer>();
-        }
-
-        private void Start()
-        {
-            m_originalScale = transform.localScale;
+            m_originalColor = m_spriteRenderer.color;
         }
 
         public void Initialize(Vector2Int gridPosition, TileType type)
         {
             m_gridPosition = gridPosition;
             m_type = type;
+            m_spriteRenderer.color = m_originalColor;
+        }
+        
+        public void SetOriginalScale(Vector3 scale)
+        {
+            m_originalScale = scale;
+            transform.localScale = m_originalScale;
         }
 
         public void ApplySprite(Sprite sprite)
@@ -50,22 +54,26 @@ namespace Match3
             gameObject.name = $"Tile_{newPosition.x}_{newPosition.y}";
         }
 
-        // 타일의 시각적 회전을 설정하는 메서드
         public void SetVisualRotation(Quaternion rotation)
         {
             transform.localRotation = rotation;
         }
 
-        public async UniTask MoveToAsync(Vector3 targetPosition)
+        /// <summary>
+        /// 목표 월드 좌표로 이동합니다.
+        /// </summary>
+        public async UniTask MoveToAsync(Vector3 targetWorldPosition)
         {
             var cancellationToken = this.GetCancellationTokenOnDestroy();
-            await transform.DOMove(targetPosition, k_MoveDuration)
+            // 다시 월드 좌표 이동(DOMove)을 사용합니다.
+            await transform.DOMove(targetWorldPosition, k_MoveDuration)
                            .SetEase(Ease.OutQuad)
                            .ToUniTask(cancellationToken: cancellationToken);
         }
 
         public void Select()
         {
+            if (m_originalScale == Vector3.zero) m_originalScale = transform.localScale;
             transform.DOScale(m_originalScale * 1.15f, k_SelectAnimDuration).SetEase(Ease.OutBack);
         }
 
@@ -81,7 +89,6 @@ namespace Match3
                 .Append(transform.DOScale(Vector3.zero, k_ClearAnimDuration).SetEase(Ease.InBack))
                 .Join(m_spriteRenderer.DOFade(0f, k_ClearAnimDuration))
                 .ToUniTask(cancellationToken: cancellationToken);
-            Destroy(gameObject);
         }
     }
 }
