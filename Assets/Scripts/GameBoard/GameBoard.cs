@@ -13,24 +13,27 @@ namespace Match3
 {
     public class GameBoard : MonoBehaviour
     {
-        /// <summary>
-        /// 보드의 논리적 회전 상태를 나타냅니다. 중력 방향에 영향을 줍니다.
-        /// </summary>
         public enum BoardRotation { Up = 0, Right = 1, Down = 2, Left = 3 }
 
-        [Header("테마 및 레벨 데이터")]
-        [SerializeField] private LevelData m_levelData;
+        [Header("데이터")]
+        [SerializeField] private LevelDatabase m_levelDatabase;
         [SerializeField] private TileThemeData m_tileTheme;
 
-        [Header("씬 오브젝트 및 프리팹")]
+        [Header("그리드 컨테이너")]
+        [SerializeField] private GameObject m_squareGridContainer;
+        [SerializeField] private GameObject m_hexagonGridContainer;
+        
+        [Header("타일 프리팹")]
         [SerializeField] private GameObject m_tilePrefab;
-        [SerializeField] private Transform m_gridTransform;
-        [SerializeField] private Transform m_tileContainer;
 
         [Header("리필 애니메이션 속도")]
         [SerializeField] private float m_refillMoveDuration = 0.6f;
         [SerializeField] private float m_refillMaxStaggerDelay = 0.4f;
 
+        private LevelData m_currentLevelData;
+        private Transform m_gridTransform;
+        private Transform m_tileContainer;
+        
         private BoardRotation m_currentRotation = BoardRotation.Up;
         private bool m_isWaitingForRefill;
         private bool m_isProcessingMove;
@@ -52,29 +55,17 @@ namespace Match3
         private void Awake()
         {
             m_mainCamera = Camera.main;
+            InitializeBoardAndLevelData();
+            InitializeGrid();
             m_onRotateButtonPressedAction = () => RotateBoard().Forget();
         }
 
         private void Start()
         {
-            if (m_levelData == null || m_tileTheme == null || m_tilePrefab == null)
+            if (m_currentLevelData == null || m_tileTheme == null || m_tilePrefab == null || m_gridManager == null)
             {
-                return;
-            }
-            if (m_tileContainer == null)
-            {
-                Debug.LogError("<b>[치명적 오류]</b> 'Tile Container'가 할당되지 않았습니다!", this);
-                return;
-            }
-            if (m_gridTransform == null)
-            {
-                m_gridTransform = transform;
-            }
-
-            InitializeGrid();
-            if (m_gridManager == null)
-            {
-                Debug.LogError("GridManager 초기화에 실패했습니다.");
+                Debug.LogError("<b>[치명적 오류]</b> GameBoard의 필수 데이터가 할당되지 않았거나 초기화에 실패했습니다.", this);
+                this.enabled = false;
                 return;
             }
 
@@ -110,9 +101,46 @@ namespace Match3
 
         #region 초기화
 
+        private void InitializeBoardAndLevelData()
+        {
+            if (m_levelDatabase == null || m_squareGridContainer == null || m_hexagonGridContainer == null)
+            {
+                Debug.LogError("<b>[치명적 오류]</b> LevelDatabase 또는 그리드 컨테이너가 할당되지 않았습니다!", this);
+                return;
+            }
+
+            int levelID = GameSettings.SelectedLevelID;
+
+            // 타이틀 씬을 거치지 않고 테스트하는 경우, 첫 번째 레벨을 기본값으로 사용
+            if (levelID < 0)
+            {
+                Debug.LogWarning("<b>[경고]</b> 선택된 레벨 ID가 없습니다. 데이터베이스의 첫 번째 레벨로 시작합니다.");
+                levelID = 0;
+            }
+
+            m_currentLevelData = m_levelDatabase.GetLevel(levelID);
+
+            if (m_currentLevelData == null)
+            {
+                Debug.LogError($"<b>[치명적 오류]</b> LevelDatabase에서 ID {levelID}에 해당하는 레벨 데이터를 찾을 수 없습니다!", this);
+                return;
+            }
+
+            bool isSquare = m_currentLevelData.GridType == GridType.Square;
+            
+            m_squareGridContainer.SetActive(isSquare);
+            m_hexagonGridContainer.SetActive(!isSquare);
+
+            GameObject activeContainer = isSquare ? m_squareGridContainer : m_hexagonGridContainer;
+            m_gridTransform = activeContainer.transform;
+            m_tileContainer = activeContainer.transform;
+        }
+
         private void InitializeGrid()
         {
-            switch (m_levelData.GridType)
+            if (m_currentLevelData == null) return;
+
+            switch (m_currentLevelData.GridType)
             {
                 case GridType.Square:
                     m_gridManager = new SquareGridManager();
@@ -120,16 +148,13 @@ namespace Match3
                 case GridType.Hexagon:
                     m_gridManager = new HexGridManager();
                     break;
-                default:
-                    Debug.LogError($"지원하지 않는 GridType입니다: {m_levelData.GridType} in {m_levelData.name}");
-                    return;
             }
-            m_gridManager.Initialize(m_levelData);
+            m_gridManager.Initialize(m_currentLevelData);
         }
 
         private void CreateTiles()
         {
-            foreach (var pos in m_levelData.TilePositions)
+            foreach (var pos in m_currentLevelData.TilePositions)
             {
                 Vector3 worldPos = GetWorldPositionFromGrid(pos.x, pos.y);
                 TileType newType = GetRandomTileTypeAvoidingInitialMatch(pos);
@@ -142,7 +167,7 @@ namespace Match3
         }
 
         #endregion
-
+        
         #region 입력 처리
 
         private void HandleInput()
@@ -314,7 +339,7 @@ namespace Match3
             bool isVerticalGravity = (gravityDir.x == 0);
 
             var columns = new Dictionary<int, List<Vector2Int>>();
-            foreach (var pos in m_levelData.TilePositions)
+            foreach (var pos in m_currentLevelData.TilePositions)
             {
                 int colKey = isVerticalGravity ? pos.x : pos.y;
                 if (!columns.ContainsKey(colKey))
@@ -400,8 +425,7 @@ namespace Match3
             var refillTasks = new List<UniTask>();
             var cancellationToken = this.GetCancellationTokenOnDestroy();
 
-            // 1. 비어있는 모든 그리드 위치를 찾습니다.
-            var emptyGridPositions = m_levelData.TilePositions
+            var emptyGridPositions = m_currentLevelData.TilePositions
                 .Where(pos => !m_tileObjects.ContainsKey(pos))
                 .ToList();
 
@@ -410,39 +434,31 @@ namespace Match3
                 return;
             }
 
-            // 2. 각 새 타일에 대한 데이터(그리드 위치, 목표 월드 위치) 목록을 생성합니다.
             var newTileData = emptyGridPositions.Select(gridPos => new
             {
                 GridPos = gridPos,
                 TargetWorldPos = GetWorldPositionFromGrid(gridPos.x, gridPos.y)
             }).ToList();
 
-            // 3. 월드 좌표를 기준으로 애니메이션 지연(staggering)을 위한 수직 범위를 결정합니다.
             float minY = newTileData.Min(d => d.TargetWorldPos.y);
             float maxY = newTileData.Max(d => d.TargetWorldPos.y);
             float verticalRange = maxY - minY;
 
-            // 4. 애니메이션 파라미터를 정의합니다.
             float screenEdgeOffset = m_gridManager.CellSize;
             float cameraTopY = m_mainCamera.transform.position.y + m_mainCamera.orthographicSize;
 
             foreach (var data in newTileData)
             {
-                // 5. 시작 위치 계산: 항상 카메라 뷰 '위쪽'.
                 var startWorldPos = new Vector3(data.TargetWorldPos.x, cameraTopY + screenEdgeOffset, data.TargetWorldPos.z);
-
-                // 6. 시작 위치에 새 타일을 생성합니다.
                 var newType = GetRandomTileTypeAvoidingInitialMatch(data.GridPos);
                 var newTile = m_tileFactory.Get(startWorldPos, data.GridPos, newType);
                 if (newTile == null) continue;
 
                 m_tileObjects[data.GridPos] = newTile;
 
-                // 7. 지연 시간 계산: Y좌표가 낮은 타일(아래쪽)이 먼저 움직입니다.
                 float delayFactor = (verticalRange > 0.01f) ? (data.TargetWorldPos.y - minY) / verticalRange : 0;
-                float delaySeconds = delayFactor * m_refillMaxStaggerDelay; // 인스펙터 값 사용
+                float delaySeconds = delayFactor * m_refillMaxStaggerDelay;
 
-                // 8. 애니메이션 작업을 추가합니다.
                 refillTasks.Add(AnimateTileFall(newTile, data.TargetWorldPos, delaySeconds, cancellationToken));
             }
 
@@ -461,8 +477,8 @@ namespace Match3
 
             if (cancellationToken.IsCancellationRequested) return;
 
-            await tile.transform.DOMove(targetPosition, m_refillMoveDuration) // 인스펙터 값 사용
-                .SetEase(Ease.Linear)
+            await tile.transform.DOMove(targetPosition, m_refillMoveDuration)
+                .SetEase(Ease.OutBack)
                 .ToUniTask(cancellationToken: cancellationToken);
         }
 
@@ -636,10 +652,10 @@ namespace Match3
                 return;
             }
 
-            int minX = m_levelData.TilePositions.Min(p => p.x);
-            int maxX = m_levelData.TilePositions.Max(p => p.x);
-            int minY = m_levelData.TilePositions.Min(p => p.y);
-            int maxY = m_levelData.TilePositions.Max(p => p.y);
+            int minX = m_currentLevelData.TilePositions.Min(p => p.x);
+            int maxX = m_currentLevelData.TilePositions.Max(p => p.x);
+            int minY = m_currentLevelData.TilePositions.Min(p => p.y);
+            int maxY = m_currentLevelData.TilePositions.Max(p => p.y);
 
             for (int y = maxY; y >= minY; y--)
             {
@@ -647,7 +663,7 @@ namespace Match3
                 for (int x = minX; x <= maxX; x++)
                 {
                     var pos = new Vector2Int(x, y);
-                    if (m_levelData.TilePositions.Contains(pos))
+                    if (m_currentLevelData.TilePositions.Contains(pos))
                     {
                         Tile tile = GetTileAt(pos);
                         if (tile != null)
