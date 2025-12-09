@@ -9,16 +9,25 @@ using Match3.UI;
 using System;
 using System.Threading;
 
+#if UNITY_EDITOR
+using UnityEditor; 
+#endif
+
 namespace Match3
 {
     public class GameBoard : MonoBehaviour
     {
         public enum BoardRotation { Up = 0, Right = 1, Down = 2, Left = 3 }
 
+        //todo : 낙하 로직 의 속도를 조절 할수있는 인스펙터 변수 추가 , 낙하후에도 매치 로직 작동 
+        
         [Header("데이터")]
         [SerializeField] private LevelDatabase m_levelDatabase;
         [SerializeField] private TileThemeData m_tileTheme;
 
+        [Header("메인 그리드 (필수)")] 
+        [SerializeField] private Grid m_mainGrid;
+        
         [Header("그리드 컨테이너")]
         [SerializeField] private GameObject m_squareGridContainer;
         [SerializeField] private GameObject m_hexagonGridContainer;
@@ -26,9 +35,12 @@ namespace Match3
         [Header("타일 프리팹")]
         [SerializeField] private GameObject m_tilePrefab;
 
-        [Header("리필 애니메이션 속도")]
-        [SerializeField] private float m_refillMoveDuration = 0.6f;
-        [SerializeField] private float m_refillMaxStaggerDelay = 0.4f;
+        [Header("설정")]
+        [SerializeField] private float m_refillMoveDuration = 0.4f;
+        [SerializeField] private float m_refillMaxStaggerDelay = 0.2f;
+
+        // [수정] 순차 낙하 지연 시간 계수 조정
+        private const float k_FallStaggerDelay = 0.08f; 
 
         private LevelData m_currentLevelData;
         private Transform m_gridTransform;
@@ -40,16 +52,21 @@ namespace Match3
         
         private Tile m_selectedTile;
         private Vector2 m_swipeStartPosition;
-        private const float k_MinSwipeDistancePixels = 50f;
+        private const float k_MinSwipeDistancePixels = 40f;
 
         private IGridManager m_gridManager;
         private TileFactory m_tileFactory;
+        
+        // 타일 관리: Grid 좌표 -> 타일 객체
         private readonly Dictionary<Vector2Int, Tile> m_tileObjects = new Dictionary<Vector2Int, Tile>();
+
+        // 인접 타일 사전 검사 저장소 (Adjacency Graph)
+        // Key: 기준 좌표, Value: 해당 좌표의 면(Face)이 맞닿은 이웃 좌표 리스트
+        private Dictionary<Vector2Int, List<Vector2Int>> m_adjacencyGraph = new Dictionary<Vector2Int, List<Vector2Int>>();
 
         private Camera m_mainCamera;
         private Action m_onRotateButtonPressedAction;
-        private readonly RaycastHit2D[] m_raycastHits = new RaycastHit2D[10];
-
+        
         #region Unity 라이프사이클
 
         private void Awake()
@@ -57,6 +74,7 @@ namespace Match3
             m_mainCamera = Camera.main;
             InitializeBoardAndLevelData();
             InitializeGrid();
+            
             m_onRotateButtonPressedAction = () => RotateBoard().Forget();
         }
 
@@ -64,13 +82,18 @@ namespace Match3
         {
             if (m_currentLevelData == null || m_tileTheme == null || m_tilePrefab == null || m_gridManager == null)
             {
-                Debug.LogError("<b>[치명적 오류]</b> GameBoard의 필수 데이터가 할당되지 않았거나 초기화에 실패했습니다.", this);
+                Debug.LogError("<b>[치명적 오류]</b> GameBoard 데이터 누락.", this);
                 this.enabled = false;
                 return;
             }
 
             m_tileFactory = new TileFactory(m_tilePrefab, m_tileContainer, m_gridManager.CellSize, m_tileTheme, m_currentRotation);
+            
+            // 1. 타일 초기 생성
             CreateTiles();
+            
+            // 2. [핵심] 보드 구조 분석 (인접 그래프 구축)
+            AnalyzeBoardStructure();
 
             if (UIManager.Instance != null)
             {
@@ -90,78 +113,96 @@ namespace Match3
 
         private void Update()
         {
+#if UNITY_EDITOR
             if (Keyboard.current.dKey.wasPressedThisFrame)
             {
                 PrintBoardState();
             }
+#endif
             HandleInput();
         }
 
         #endregion
 
-        #region 초기화
+        #region 초기화 및 구조 분석
 
         private void InitializeBoardAndLevelData()
         {
-            if (m_levelDatabase == null || m_squareGridContainer == null || m_hexagonGridContainer == null)
+            int levelID = GameSettings.SelectedLevelID < 0 ? 0 : GameSettings.SelectedLevelID;
+            m_currentLevelData = m_levelDatabase != null ? m_levelDatabase.GetLevel(levelID) : null;
+
+            if (m_currentLevelData == null) return;
+            
+            if (m_mainGrid != null)
             {
-                Debug.LogError("<b>[치명적 오류]</b> LevelDatabase 또는 그리드 컨테이너가 할당되지 않았습니다!", this);
-                return;
-            }
-
-            int levelID = GameSettings.SelectedLevelID;
-
-            // 타이틀 씬을 거치지 않고 테스트하는 경우, 첫 번째 레벨을 기본값으로 사용
-            if (levelID < 0)
-            {
-                Debug.LogWarning("<b>[경고]</b> 선택된 레벨 ID가 없습니다. 데이터베이스의 첫 번째 레벨로 시작합니다.");
-                levelID = 0;
-            }
-
-            m_currentLevelData = m_levelDatabase.GetLevel(levelID);
-
-            if (m_currentLevelData == null)
-            {
-                Debug.LogError($"<b>[치명적 오류]</b> LevelDatabase에서 ID {levelID}에 해당하는 레벨 데이터를 찾을 수 없습니다!", this);
-                return;
+                if (m_currentLevelData.GridType == GridType.Hexagon)
+                {
+                    m_mainGrid.cellLayout = GridLayout.CellLayout.Hexagon;
+                }
+                else
+                {
+                    m_mainGrid.cellLayout = GridLayout.CellLayout.Rectangle;
+                }
             }
 
             bool isSquare = m_currentLevelData.GridType == GridType.Square;
-            
-            m_squareGridContainer.SetActive(isSquare);
-            m_hexagonGridContainer.SetActive(!isSquare);
+            if (m_squareGridContainer) m_squareGridContainer.SetActive(isSquare);
+            if (m_hexagonGridContainer) m_hexagonGridContainer.SetActive(!isSquare);
 
             GameObject activeContainer = isSquare ? m_squareGridContainer : m_hexagonGridContainer;
-            m_gridTransform = activeContainer.transform;
-            m_tileContainer = activeContainer.transform;
+            if (activeContainer)
+            {
+                m_gridTransform = activeContainer.transform;
+                m_tileContainer = activeContainer.transform;
+            }
         }
 
         private void InitializeGrid()
         {
             if (m_currentLevelData == null) return;
-
-            switch (m_currentLevelData.GridType)
-            {
-                case GridType.Square:
-                    m_gridManager = new SquareGridManager();
-                    break;
-                case GridType.Hexagon:
-                    m_gridManager = new HexGridManager();
-                    break;
-            }
-            m_gridManager.Initialize(m_currentLevelData);
+            m_gridManager = m_currentLevelData.GridType == GridType.Hexagon ? new HexGridManager() : new SquareGridManager();
+            m_gridManager.Initialize(m_currentLevelData, m_mainGrid);
         }
 
         private void CreateTiles()
         {
+            m_tileObjects.Clear(); // 딕셔너리 초기화 (중복 생성 방지)
+
             foreach (var pos in m_currentLevelData.TilePositions)
             {
+                // 이미 해당 위치에 타일이 있다면 스킵 (안전 장치)
+                if (m_tileObjects.ContainsKey(pos)) continue;
+
                 Vector3 worldPos = GetWorldPositionFromGrid(pos.x, pos.y);
                 TileType newType = GetRandomTileTypeAvoidingInitialMatch(pos);
                 Tile newTile = m_tileFactory.Get(worldPos, pos, newType);
-                if (newTile != null)
+                if (newTile != null) m_tileObjects[pos] = newTile;
+            }
+        }
+
+        private void AnalyzeBoardStructure()
+        {
+            m_adjacencyGraph.Clear();
+
+            var allPositions = m_currentLevelData.TilePositions;
+            if (allPositions.Count == 0) return;
+
+            float neighborDistanceThreshold = m_gridManager.CellSize * 1.15f; 
+
+            foreach (var pos in allPositions)
+            {
+                m_adjacencyGraph[pos] = new List<Vector2Int>();
+                Vector3 myWorldPos = GetWorldPositionFromGrid(pos.x, pos.y);
+
+                foreach (var neighborPos in allPositions)
                 {
-                    m_tileObjects.Add(pos, newTile);
+                    if (pos == neighborPos) continue;
+
+                    Vector3 neighborWorldPos = GetWorldPositionFromGrid(neighborPos.x, neighborPos.y);
+                    if (Vector3.Distance(myWorldPos, neighborWorldPos) <= neighborDistanceThreshold)
+                    {
+                        m_adjacencyGraph[pos].Add(neighborPos);
+                    }
                 }
             }
         }
@@ -172,83 +213,105 @@ namespace Match3
 
         private void HandleInput()
         {
-            if (m_isProcessingMove || m_mainCamera == null || Pointer.current == null)
-            {
-                return;
-            }
+            if (m_mainCamera == null || Pointer.current == null) return;
 
             if (Pointer.current.press.wasPressedThisFrame)
             {
-                m_selectedTile = GetTileUnderPointer();
-                if (m_selectedTile != null)
+                if (m_isProcessingMove && !m_isWaitingForRefill) return;
+
+                Tile hitTile = GetTileUnderPointer();
+                if (hitTile != null)
                 {
+                    m_selectedTile = hitTile;
                     m_swipeStartPosition = Pointer.current.position.ReadValue();
                     m_selectedTile.Select();
                 }
             }
 
-            if (Pointer.current.press.wasReleasedThisFrame && m_selectedTile != null)
+            if (Pointer.current.press.wasReleasedThisFrame)
             {
-                m_selectedTile.Deselect();
-                Vector2 swipeEndPosition = Pointer.current.position.ReadValue();
-                Vector2 swipeVector = swipeEndPosition - m_swipeStartPosition;
-
-                if (swipeVector.magnitude > k_MinSwipeDistancePixels)
+                if (m_selectedTile != null)
                 {
-                    Vector2Int screenSwipeDir = GetSwipeDirection(swipeVector);
-                    Vector2Int logicalSwipeDir = GetRotatedDirection(screenSwipeDir);
-                    Tile neighborTile = GetTileAt(m_selectedTile.GridPosition + logicalSwipeDir);
-
-                    if (neighborTile != null)
+                    m_selectedTile.Deselect();
+                    
+                    if (m_isProcessingMove && !m_isWaitingForRefill)
                     {
-                        SwapAndProcessMatchesAsync(m_selectedTile, neighborTile).Forget();
+                        m_selectedTile = null;
+                        return;
                     }
+
+                    Vector2 currentPos = Pointer.current.position.ReadValue();
+                    Vector2 swipeVector = currentPos - m_swipeStartPosition;
+
+                    if (swipeVector.magnitude > k_MinSwipeDistancePixels)
+                    {
+                        Tile neighborTile = FindPrecalculatedNeighbor(m_selectedTile, swipeVector);
+
+                        if (neighborTile != null)
+                        {
+                            SwapAndProcessMatchesAsync(m_selectedTile, neighborTile).Forget();
+                        }
+                    }
+                    m_selectedTile = null;
                 }
-                m_selectedTile = null;
             }
+        }
+
+        private Tile FindPrecalculatedNeighbor(Tile startTile, Vector2 swipeVector)
+        {
+            if (!m_adjacencyGraph.TryGetValue(startTile.GridPosition, out var neighbors))
+                return null;
+
+            Vector2 normalizedSwipe = swipeVector.normalized;
+            Tile bestMatch = null;
+            float maxDot = 0.5f;
+
+            foreach (var neighborPos in neighbors)
+            {
+                Tile neighborTile = GetTileAt(neighborPos);
+                if (neighborTile == null) continue;
+
+                Vector2 directionToNeighbor = (neighborTile.transform.position - startTile.transform.position).normalized;
+                float dot = Vector2.Dot(normalizedSwipe, directionToNeighbor);
+
+                if (dot > maxDot)
+                {
+                    maxDot = dot;
+                    bestMatch = neighborTile;
+                }
+            }
+            return bestMatch;
         }
 
         private Tile GetTileUnderPointer()
         {
             Vector2 screenPoint = Pointer.current.position.ReadValue();
-            int hitCount = Physics2D.RaycastNonAlloc(m_mainCamera.ScreenToWorldPoint(screenPoint), Vector2.zero, m_raycastHits);
-            for (int i = 0; i < hitCount; i++)
+            Vector3 worldPoint = m_mainCamera.ScreenToWorldPoint(screenPoint);
+            
+            // [수정] Deprecated된 RaycastNonAlloc 대신 Raycast 사용
+            RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
+            
+            if (hit.collider != null)
             {
-                var hit = m_raycastHits[i];
-                if (hit.collider != null)
-                {
-                    var tile = hit.collider.GetComponent<Tile>();
-                    if (tile != null && tile.gameObject.activeInHierarchy)
-                    {
-                        return tile;
-                    }
-                }
+                var tile = hit.collider.GetComponent<Tile>();
+                if (tile != null && tile.gameObject.activeInHierarchy) return tile;
             }
             return null;
         }
 
-        private Vector2Int GetSwipeDirection(Vector2 swipeVector)
-        {
-            if (Mathf.Abs(swipeVector.x) > Mathf.Abs(swipeVector.y))
-            {
-                return swipeVector.x > 0 ? Vector2Int.right : Vector2Int.left;
-            }
-            else
-            {
-                return swipeVector.y > 0 ? Vector2Int.up : Vector2Int.down;
-            }
-        }
-
         #endregion
 
-        #region 게임 로직 (매치, 스왑, 클리어)
+        #region 게임 로직 (매치 & 스왑)
 
         private async UniTaskVoid SwapAndProcessMatchesAsync(Tile tileA, Tile tileB)
         {
             m_isProcessingMove = true;
+            m_isWaitingForRefill = false;
+
             await SwapTilesAsync(tileA, tileB);
 
-            var matches = FindAllMatches();
+            var matches = FindAllMatchesGraphBased();
+            
             if (matches.Count > 0)
             {
                 await ProcessMatchesLoopAsync(matches);
@@ -256,7 +319,7 @@ namespace Match3
             else
             {
                 await UniTask.Delay(50);
-                await SwapTilesAsync(tileB, tileA); // 매치 실패 시 원위치
+                await SwapTilesAsync(tileB, tileA); 
             }
             m_isProcessingMove = false;
         }
@@ -273,8 +336,10 @@ namespace Match3
             var taskB = tileB.MoveToAsync(targetWorldPosB);
             await UniTask.WhenAll(taskA, taskB);
 
-            m_tileObjects[gridPosA] = tileB;
-            m_tileObjects[gridPosB] = tileA;
+            // 딕셔너리 안전 갱신
+            if (m_tileObjects.ContainsKey(gridPosA)) m_tileObjects[gridPosA] = tileB;
+            if (m_tileObjects.ContainsKey(gridPosB)) m_tileObjects[gridPosB] = tileA;
+            
             tileA.SetGridPosition(gridPosB);
             tileB.SetGridPosition(gridPosA);
         }
@@ -282,11 +347,21 @@ namespace Match3
         private async UniTask ProcessMatchesLoopAsync(List<Tile> initialMatches)
         {
             var matchesToProcess = new List<Tile>(initialMatches);
+            
+            int safetyCounter = 0;
+            const int k_MaxCascades = 20;
+
             while (matchesToProcess.Count > 0)
             {
+                if (safetyCounter++ > k_MaxCascades)
+                {
+                    Debug.LogWarning("[GameBoard] 무한 연쇄 매치 감지로 인한 강제 중단");
+                    break;
+                }
+
                 await ClearTilesAsync(matchesToProcess);
-                await CollapseGapsAsync();
-                matchesToProcess = FindAllMatches();
+                await CollapseGapsGraphBasedAsync(); 
+                matchesToProcess = FindAllMatchesGraphBased();
             }
             m_isWaitingForRefill = true;
         }
@@ -297,9 +372,11 @@ namespace Match3
             foreach (var tile in tilesToClear)
             {
                 if (tile == null) continue;
-
-                if (m_tileObjects.Remove(tile.GridPosition))
+                
+                // 확실하게 딕셔너리에서 제거되었는지 확인
+                if (m_tileObjects.ContainsKey(tile.GridPosition))
                 {
+                    m_tileObjects.Remove(tile.GridPosition);
                     clearTasks.Add(tile.ClearAsync().ContinueWith(() => m_tileFactory.Release(tile)));
                 }
             }
@@ -308,97 +385,112 @@ namespace Match3
 
         #endregion
 
-        #region 보드 제어 (회전, 재정렬, 리필)
+        #region 낙하 로직 (핵심 수정 사항)
 
-        private async UniTaskVoid RotateBoard()
-        {
-            if (m_isProcessingMove) return;
-
-            m_isProcessingMove = true;
-            m_currentRotation = (BoardRotation)(((int)m_currentRotation + 1) % 4);
-
-            Vector3 rotationVector = new Vector3(0, 0, -90 * (int)m_currentRotation);
-            await m_gridTransform.DORotate(rotationVector, 0.4f).SetEase(Ease.OutBack)
-                                 .ToUniTask(cancellationToken: this.GetCancellationTokenOnDestroy());
-
-            await RearrangeAfterRotationAsync();
-
-            m_isWaitingForRefill = true;
-            m_isProcessingMove = false;
-        }
-
-        private async UniTask RearrangeAfterRotationAsync()
-        {
-            await CollapseGapsAsync();
-        }
-
-        private async UniTask CollapseGapsAsync()
+        private async UniTask CollapseGapsGraphBasedAsync()
         {
             var moveTasks = new List<UniTask>();
-            Vector2Int gravityDir = GetGravityDirection();
-            bool isVerticalGravity = (gravityDir.x == 0);
+            bool moved;
+            int iterationCount = 0;
+            const int k_MaxIterations = 100;
 
-            var columns = new Dictionary<int, List<Vector2Int>>();
-            foreach (var pos in m_currentLevelData.TilePositions)
+            var allPositions = m_currentLevelData.TilePositions;
+            
+            do
             {
-                int colKey = isVerticalGravity ? pos.x : pos.y;
-                if (!columns.ContainsKey(colKey))
+                if (iterationCount++ > k_MaxIterations)
                 {
-                    columns[colKey] = new List<Vector2Int>();
+                    Debug.LogWarning("[GameBoard] Collapse Loop Limit Exceeded");
+                    break;
                 }
-                columns[colKey].Add(pos);
-            }
 
-            foreach (var kvp in columns)
-            {
-                var slots = kvp.Value;
+                moved = false;
+                moveTasks.Clear(); // [수정] 태스크 리스트 초기화
+                
+                // 바닥부터 위로 스캔 (월드 Y 기준 정렬)
+                var sortedSlots = allPositions
+                    .Select(p => new { GridPos = p, WorldPos = GetWorldPositionFromGrid(p.x, p.y) })
+                    .OrderBy(item => item.WorldPos.y) 
+                    .ToList();
 
-                slots.Sort((a, b) =>
+                // 이번 패스에서 이동할 타일들의 목표 위치를 기록하여 중복 방지
+                HashSet<Vector2Int> targetedPositions = new HashSet<Vector2Int>();
+
+                foreach (var slot in sortedSlots)
                 {
-                    int dotA = a.x * gravityDir.x + a.y * gravityDir.y;
-                    int dotB = b.x * gravityDir.x + b.y * gravityDir.y;
-                    return dotB.CompareTo(dotA);
-                });
+                    // 1. 이미 타일이 있는 곳은 패스
+                    if (m_tileObjects.ContainsKey(slot.GridPos)) continue;
+                    
+                    // 2. 이번 패스에서 이미 누군가 오기로 한 곳이면 패스
+                    if (targetedPositions.Contains(slot.GridPos)) continue;
 
-                var tiles = new List<Tile>();
-                var tilesToRemove = new List<Vector2Int>();
+                    Tile supplier = GetBestSupplierForSlot(slot.GridPos, slot.WorldPos);
 
-                foreach (var slot in slots)
-                {
-                    if (m_tileObjects.TryGetValue(slot, out Tile t))
+                    if (supplier != null)
                     {
-                        tiles.Add(t);
-                        tilesToRemove.Add(slot);
+                        Vector2Int oldPos = supplier.GridPosition;
+                        
+                        // [핵심] 딕셔너리 즉시 갱신 (논리적 위치 이동 완료)
+                        m_tileObjects.Remove(oldPos);
+                        m_tileObjects[slot.GridPos] = supplier;
+                        supplier.SetGridPosition(slot.GridPos);
+                        
+                        targetedPositions.Add(slot.GridPos); // 이 슬롯은 채워짐
+
+                        // 시각적 애니메이션 태스크 추가
+                        moveTasks.Add(AnimateTileMove(supplier, slot.WorldPos, 0f, Ease.OutQuad));
+                        
+                        moved = true;
                     }
                 }
 
-                foreach (var pos in tilesToRemove)
+                // [핵심 수정] 이번 패스의 모든 애니메이션이 끝날 때까지 대기
+                // 이를 통해 물리적 위치와 논리적 위치의 싱크를 맞춤 (겹침 방지)
+                if (moveTasks.Count > 0)
                 {
-                    m_tileObjects.Remove(pos);
+                    await UniTask.WhenAll(moveTasks);
                 }
 
-                for (int i = 0; i < tiles.Count; i++)
-                {
-                    Tile tile = tiles[i];
-                    Vector2Int targetSlot = slots[i];
-
-                    tile.SetGridPosition(targetSlot);
-                    m_tileObjects[targetSlot] = tile;
-
-                    Vector3 targetWorldPos = GetWorldPositionFromGrid(targetSlot.x, targetSlot.y);
-                    if (Vector3.Distance(tile.transform.position, targetWorldPos) > 0.01f)
-                    {
-                        moveTasks.Add(tile.MoveToAsync(targetWorldPos));
-                    }
-                }
-            }
-
-            await UniTask.WhenAll(moveTasks);
+            } while (moved); 
         }
+
+        private Tile GetBestSupplierForSlot(Vector2Int targetGridPos, Vector3 targetWorldPos)
+        {
+            if (!m_adjacencyGraph.TryGetValue(targetGridPos, out var neighbors)) return null;
+
+            Tile bestCandidate = null;
+            float bestScore = -1f;
+            Vector3 upDir = Vector3.up; // World Up
+
+            foreach (var neighborPos in neighbors)
+            {
+                if (!m_tileObjects.TryGetValue(neighborPos, out Tile candidateTile)) continue;
+
+                Vector3 candidatePos = GetWorldPositionFromGrid(neighborPos.x, neighborPos.y); 
+                Vector3 dirToCandidate = (candidatePos - targetWorldPos).normalized;
+
+                float score = Vector3.Dot(dirToCandidate, upDir);
+
+                if (score > 0.45f) 
+                {
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestCandidate = candidateTile;
+                    }
+                }
+            }
+
+            return bestCandidate;
+        }
+
+        #endregion
+
+        #region 리필 로직
 
         private void OnRefillButtonPressed()
         {
-            if (m_isProcessingMove || !m_isWaitingForRefill) return;
+            if (m_isProcessingMove && !m_isWaitingForRefill) return;
             RefillAndCheckCascadesAsync().Forget();
         }
 
@@ -408,7 +500,7 @@ namespace Match3
             m_isWaitingForRefill = false;
 
             await RefillBoardAsync();
-            var newMatches = FindAllMatches();
+            var newMatches = FindAllMatchesGraphBased();
             if (newMatches.Count > 0)
             {
                 await ProcessMatchesLoopAsync(newMatches);
@@ -416,275 +508,221 @@ namespace Match3
             m_isProcessingMove = false;
         }
 
-        /// <summary>
-        /// 비어있는 모든 타일 슬롯을 채웁니다. 타일은 월드 좌표 기준 위에서 생성되며,
-        /// 보드의 가장 아래쪽에 채워질 타일부터 애니메이션이 시작됩니다.
-        /// </summary>
         private async UniTask RefillBoardAsync()
         {
             var refillTasks = new List<UniTask>();
-            var cancellationToken = this.GetCancellationTokenOnDestroy();
+            var ct = this.GetCancellationTokenOnDestroy();
 
-            var emptyGridPositions = m_currentLevelData.TilePositions
-                .Where(pos => !m_tileObjects.ContainsKey(pos))
+            // m_tileObjects 키 검사로 빈 공간 확인
+            var emptyPositions = m_currentLevelData.TilePositions
+                .Where(p => !m_tileObjects.ContainsKey(p))
                 .ToList();
 
-            if (emptyGridPositions.Count == 0)
-            {
-                return;
-            }
+            if (emptyPositions.Count == 0) return;
 
-            var newTileData = emptyGridPositions.Select(gridPos => new
-            {
-                GridPos = gridPos,
-                TargetWorldPos = GetWorldPositionFromGrid(gridPos.x, gridPos.y)
-            }).ToList();
-
-            float minY = newTileData.Min(d => d.TargetWorldPos.y);
-            float maxY = newTileData.Max(d => d.TargetWorldPos.y);
-            float verticalRange = maxY - minY;
-
-            float screenEdgeOffset = m_gridManager.CellSize;
+            // 딜레이 계산용
+            float minY = m_currentLevelData.TilePositions.Min(p => GetWorldPositionFromGrid(p.x, p.y).y);
             float cameraTopY = m_mainCamera.transform.position.y + m_mainCamera.orthographicSize;
+            float spawnOffset = m_gridManager.CellSize * 2f;
 
-            foreach (var data in newTileData)
+            foreach (var gridPos in emptyPositions)
             {
-                var startWorldPos = new Vector3(data.TargetWorldPos.x, cameraTopY + screenEdgeOffset, data.TargetWorldPos.z);
-                var newType = GetRandomTileTypeAvoidingInitialMatch(data.GridPos);
-                var newTile = m_tileFactory.Get(startWorldPos, data.GridPos, newType);
+                // 혹시 모를 중복 생성 방지
+                if (m_tileObjects.ContainsKey(gridPos)) continue;
+
+                Vector3 targetWorldPos = GetWorldPositionFromGrid(gridPos.x, gridPos.y);
+                Vector3 startPos = new Vector3(targetWorldPos.x, cameraTopY + spawnOffset, 0);
+
+                var newType = GetRandomTileTypeAvoidingInitialMatch(gridPos);
+                var newTile = m_tileFactory.Get(startPos, gridPos, newType);
                 if (newTile == null) continue;
 
-                m_tileObjects[data.GridPos] = newTile;
-
-                float delayFactor = (verticalRange > 0.01f) ? (data.TargetWorldPos.y - minY) / verticalRange : 0;
-                float delaySeconds = delayFactor * m_refillMaxStaggerDelay;
-
-                refillTasks.Add(AnimateTileFall(newTile, data.TargetWorldPos, delaySeconds, cancellationToken));
+                m_tileObjects[gridPos] = newTile; // 즉시 등록하여 점유 표시
+                
+                // 월드 Y 기준 딜레이
+                float delay = (targetWorldPos.y - minY) * k_FallStaggerDelay;
+                refillTasks.Add(AnimateTileMove(newTile, targetWorldPos, delay, Ease.OutBounce));
             }
-
             await UniTask.WhenAll(refillTasks);
         }
 
-        /// <summary>
-        /// 타일 하나를 지정된 위치로 이동시키는 애니메이션을 실행합니다.
-        /// </summary>
-        private async UniTask AnimateTileFall(Tile tile, Vector3 targetPosition, float delay, CancellationToken cancellationToken)
+        private async UniTask AnimateTileMove(Tile tile, Vector3 targetPos, float delay, Ease easeType)
         {
-            if (delay > 0)
-            {
-                await UniTask.Delay(TimeSpan.FromSeconds(delay), cancellationToken: cancellationToken);
-            }
-
-            if (cancellationToken.IsCancellationRequested) return;
-
-            await tile.transform.DOMove(targetPosition, m_refillMoveDuration)
-                .SetEase(Ease.OutBack)
-                .ToUniTask(cancellationToken: cancellationToken);
+            var ct = this.GetCancellationTokenOnDestroy();
+            if (delay > 0) await UniTask.Delay(TimeSpan.FromSeconds(delay), cancellationToken: ct);
+            if (ct.IsCancellationRequested) return;
+            
+            await tile.transform.DOMove(targetPos, m_refillMoveDuration)
+                .SetEase(easeType)
+                .ToUniTask(cancellationToken: ct);
         }
 
         #endregion
 
-        #region 매치 찾기
+        #region 매치 찾기 (Graph Based)
 
-        private List<Tile> FindAllMatches()
+        private List<Tile> FindAllMatchesGraphBased()
         {
-            var allMatchedTiles = new HashSet<Tile>();
-            foreach (var tile in m_tileObjects.Values.ToList())
-            {
-                if (tile == null) continue;
+            var allMatches = new HashSet<Tile>();
 
-                var matches = FindMatches(tile.GridPosition);
-                if (matches.Count > 0)
+            Vector3[] matchDirections;
+            if (m_currentLevelData.GridType == GridType.Hexagon)
+            {
+                matchDirections = new Vector3[] 
+                { 
+                    Vector3.up,                                  
+                    Quaternion.Euler(0,0,-60) * Vector3.up,      
+                    Quaternion.Euler(0,0,60) * Vector3.up        
+                };
+            }
+            else 
+            {
+                matchDirections = new Vector3[] { Vector3.right, Vector3.up };
+            }
+
+            foreach (var kvp in m_tileObjects)
+            {
+                Tile startTile = kvp.Value;
+                if (startTile == null) continue;
+
+                foreach (var dir in matchDirections)
                 {
-                    allMatchedTiles.UnionWith(matches);
+                    List<Tile> line = GetMatchLine(startTile, dir);
+                    if (line.Count >= 3)
+                    {
+                        foreach (var t in line) allMatches.Add(t);
+                    }
                 }
             }
-            return allMatchedTiles.ToList();
+            return allMatches.ToList();
         }
 
-        private List<Tile> FindMatches(Vector2Int startPos)
+        private List<Tile> GetMatchLine(Tile startTile, Vector3 worldDir)
         {
-            Tile startTile = GetTileAt(startPos);
-            if (startTile == null)
-            {
-                return new List<Tile>();
-            }
+            var line = new List<Tile> { startTile };
+            TileType type = startTile.Type;
 
-            var matchedTiles = new HashSet<Tile>();
-            var rightMatches = FindMatchesInDirection(startPos, startTile.Type, Vector2Int.right);
-            var leftMatches = FindMatchesInDirection(startPos, startTile.Type, Vector2Int.left);
+            CheckDirection(startTile, worldDir, type, line);
+            CheckDirection(startTile, -worldDir, type, line);
 
-            if (rightMatches.Count + leftMatches.Count >= 2)
-            {
-                matchedTiles.UnionWith(rightMatches);
-                matchedTiles.UnionWith(leftMatches);
-            }
-
-            var upMatches = FindMatchesInDirection(startPos, startTile.Type, Vector2Int.up);
-            var downMatches = FindMatchesInDirection(startPos, startTile.Type, Vector2Int.down);
-
-            if (upMatches.Count + downMatches.Count >= 2)
-            {
-                matchedTiles.UnionWith(upMatches);
-                matchedTiles.UnionWith(downMatches);
-            }
-
-            if (matchedTiles.Count > 0)
-            {
-                matchedTiles.Add(startTile);
-            }
-            return matchedTiles.ToList();
+            return line;
         }
 
-        private List<Tile> FindMatchesInDirection(Vector2Int startPos, TileType typeToMatch, Vector2Int direction)
+        private void CheckDirection(Tile startTile, Vector3 worldDir, TileType type, List<Tile> resultList)
         {
-            var matches = new List<Tile>();
-            for (int i = 1; i < 10; i++)
+            Tile current = startTile;
+            Vector3 probeDir = worldDir.normalized;
+            
+            for(int i=0; i<9; i++)
             {
-                var nextPos = startPos + direction * i;
-                Tile nextTile = GetTileAt(nextPos);
-                if (nextTile != null && nextTile.Type == typeToMatch)
+                Tile next = FindNeighborInDirectionGraph(current, probeDir);
+                if (next != null && next.Type == type && !resultList.Contains(next))
                 {
-                    matches.Add(nextTile);
+                    resultList.Add(next);
+                    current = next;
                 }
-                else
+                else break;
+            }
+        }
+
+        private Tile FindNeighborInDirectionGraph(Tile origin, Vector3 dir)
+        {
+            if (!m_adjacencyGraph.TryGetValue(origin.GridPosition, out var neighbors)) return null;
+
+            Tile best = null;
+            float maxDot = 0.85f; 
+
+            foreach(var nPos in neighbors)
+            {
+                Tile t = GetTileAt(nPos);
+                if (t == null) continue;
+
+                Vector3 toNeighbor = (t.transform.position - origin.transform.position).normalized;
+                if (Vector3.Dot(toNeighbor, dir) > maxDot)
                 {
-                    break;
+                    best = t;
+                    break; 
                 }
             }
-            return matches;
+            return best;
         }
+
+        #endregion
+
+        #region 초기 생성 유틸
 
         private TileType GetRandomTileTypeAvoidingInitialMatch(Vector2Int pos)
         {
-            var possibleTypes = System.Enum.GetValues(typeof(TileType))
-                                      .Cast<TileType>()
-                                      .Where(t => t < TileType.Bomb)
-                                      .OrderBy(t => UnityEngine.Random.value)
-                                      .ToList();
-
-            foreach (var type in possibleTypes)
-            {
-                if (!CreatesInitialMatch(pos, type))
-                {
-                    return type;
-                }
-            }
-            return possibleTypes.FirstOrDefault();
-        }
-
-        private bool CreatesInitialMatch(Vector2Int pos, TileType type)
-        {
-            // 수평 체크
-            Tile r1 = GetTileAt(pos + Vector2Int.right);
-            Tile l1 = GetTileAt(pos + Vector2Int.left);
-            if (r1 != null && l1 != null && r1.Type == type && l1.Type == type) return true;
-
-            Tile r2 = GetTileAt(pos + new Vector2Int(2, 0));
-            if (r1 != null && r2 != null && r1.Type == type && r2.Type == type) return true;
-
-            Tile l2 = GetTileAt(pos + new Vector2Int(-2, 0));
-            if (l1 != null && l2 != null && l1.Type == type && l2.Type == type) return true;
-
-            // 수직 체크
-            Tile u1 = GetTileAt(pos + Vector2Int.up);
-            Tile d1 = GetTileAt(pos + Vector2Int.down);
-            if (u1 != null && d1 != null && u1.Type == type && d1.Type == type) return true;
-
-            Tile u2 = GetTileAt(pos + new Vector2Int(0, 2));
-            if (u1 != null && u2 != null && u1.Type == type && u2.Type == type) return true;
-
-            Tile d2 = GetTileAt(pos + new Vector2Int(0, -2));
-            if (d1 != null && d2 != null && d1.Type == type && d2.Type == type) return true;
-
-            return false;
+            var types = Enum.GetValues(typeof(TileType)).Cast<TileType>()
+                .Where(t => t < TileType.Bomb)
+                .OrderBy(x => UnityEngine.Random.value)
+                .ToList();
+            return types[0];
         }
 
         #endregion
 
-        #region 유틸리티 및 디버그
+        #region 기본 유틸리티
 
         public Tile GetTileAt(Vector2Int pos)
         {
-            m_tileObjects.TryGetValue(pos, out Tile tile);
-            return tile;
+            m_tileObjects.TryGetValue(pos, out Tile t);
+            return t;
         }
 
         private Vector3 GetWorldPositionFromGrid(int x, int y)
         {
-            Vector3 localPos = m_gridManager.GetLocalPosition(x, y);
-            return m_gridTransform.TransformPoint(localPos);
+            Vector3 local = m_gridManager.GetLocalPosition(x, y);
+            return m_gridTransform.TransformPoint(local);
         }
 
-        private Vector2Int GetGravityDirection()
+        private async UniTask RotateBoard()
         {
-            switch (m_currentRotation)
-            {
-                case BoardRotation.Up: return Vector2Int.down;
-                case BoardRotation.Right: return Vector2Int.right;
-                case BoardRotation.Down: return Vector2Int.up;
-                case BoardRotation.Left: return Vector2Int.left;
-                default: return Vector2Int.down;
-            }
-        }
-
-        private Vector2Int GetRotatedDirection(Vector2Int screenDirection)
-        {
-            switch (m_currentRotation)
-            {
-                case BoardRotation.Up: return screenDirection;
-                case BoardRotation.Right: return new Vector2Int(-screenDirection.y, screenDirection.x);
-                case BoardRotation.Down: return new Vector2Int(-screenDirection.x, -screenDirection.y);
-                case BoardRotation.Left: return new Vector2Int(screenDirection.y, -screenDirection.x);
-                default: return screenDirection;
-            }
+            if (m_isProcessingMove) return;
+            m_isProcessingMove = true;
+            m_currentRotation = (BoardRotation)(((int)m_currentRotation + 1) % 4);
+            
+            await m_gridTransform.DORotate(new Vector3(0, 0, -90 * (int)m_currentRotation), 0.4f)
+                .SetEase(Ease.OutBack)
+                .ToUniTask();
+            
+            // 회전 후 구조 재분석 (필요시)
+            AnalyzeBoardStructure();
+            
+            // 낙하 시도 
+            await CollapseGapsGraphBasedAsync();
+            
+            m_isWaitingForRefill = true;
+            m_isProcessingMove = false;
         }
 
         private void PrintBoardState()
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("\n<b>--- 현재 보드 상태 ---</b>");
-
-            if (m_tileObjects == null || m_tileObjects.Count == 0)
-            {
-                sb.AppendLine("보드가 비어있습니다.");
-                Debug.Log(sb.ToString());
-                return;
-            }
-
-            int minX = m_currentLevelData.TilePositions.Min(p => p.x);
-            int maxX = m_currentLevelData.TilePositions.Max(p => p.x);
-            int minY = m_currentLevelData.TilePositions.Min(p => p.y);
-            int maxY = m_currentLevelData.TilePositions.Max(p => p.y);
-
-            for (int y = maxY; y >= minY; y--)
-            {
-                sb.Append($"Row {y,2}: ");
-                for (int x = minX; x <= maxX; x++)
-                {
-                    var pos = new Vector2Int(x, y);
-                    if (m_currentLevelData.TilePositions.Contains(pos))
-                    {
-                        Tile tile = GetTileAt(pos);
-                        if (tile != null)
-                        {
-                            sb.Append($"[{tile.Type.ToString()[7]}]");
-                        }
-                        else
-                        {
-                            sb.Append("[ ]");
-                        }
-                    }
-                    else
-                    {
-                        sb.Append("   ");
-                    }
-                }
-                sb.AppendLine();
-            }
-            Debug.Log(sb.ToString());
         }
 
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            if (m_currentLevelData == null || m_gridManager == null) return;
+            
+            GUIStyle style = new GUIStyle();
+            style.normal.textColor = Color.white;
+            foreach (var pos in m_currentLevelData.TilePositions)
+            {
+                Vector3 wp = GetWorldPositionFromGrid(pos.x, pos.y);
+                Handles.Label(wp, $"{pos.x},{pos.y}", style);
+            }
+        }
+#endif
         #endregion
+
+#if UNITY_EDITOR
+        public void LoadLevelForEditor(int levelID)
+        {
+            if (!Application.isPlaying) return;
+            GameSettings.SelectedLevelID = levelID;
+            Start(); 
+        }
+#endif
     }
 }

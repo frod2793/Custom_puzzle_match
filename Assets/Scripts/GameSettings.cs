@@ -1,3 +1,9 @@
+using UnityEngine;
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace Match3
 {
     /// <summary>
@@ -6,8 +12,26 @@ namespace Match3
     public static class GameSettings
     {
         /// <summary>
-        /// 사용자가 타이틀 씬에서 선택한 레벨의 ID (LevelDatabase의 인덱스)
+        /// 사용자가 타이틀 씬 또는 에디터에서 선택한 레벨의 ID (LevelDatabase의 인덱스)
         /// </summary>
-        public static int SelectedLevelID { get; set; } = -1; // -1은 선택되지 않음을 의미
+        public static int SelectedLevelID { get; set; } = -1;
+
+#if UNITY_EDITOR
+        private const string k_SelectedLevelPrefKey = "Match3.Editor.SelectedLevelID";
+
+        // 플레이 모드 시작 시 EditorPrefs에서 값을 읽어와 복원합니다.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void InitializeOnLoad()
+        {
+            SelectedLevelID = EditorPrefs.GetInt(k_SelectedLevelPrefKey, -1);
+        }
+
+        // 에디터용 편의 함수: 레벨 ID를 EditorPrefs에 저장합니다.
+        public static void SetSelectedLevelForEditor(int levelID)
+        {
+            EditorPrefs.SetInt(k_SelectedLevelPrefKey, levelID);
+            SelectedLevelID = levelID;
+        }
+#endif
     }
 }

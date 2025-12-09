@@ -1,7 +1,6 @@
 using UnityEngine;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
-using System.Threading;
 
 namespace Match3
 {
@@ -20,21 +19,43 @@ namespace Match3
         private Vector3 m_originalScale;
         private Color m_originalColor;
 
+        private bool m_isInitialized = false;
+
         private const float k_MoveDuration = 0.2f;
         private const float k_SelectAnimDuration = 0.15f;
         private const float k_ClearAnimDuration = 0.25f;
 
         private void Awake()
         {
+            // Awake에서는 컴포넌트 참조만 가져옵니다.
             m_spriteRenderer = GetComponent<SpriteRenderer>();
-            m_originalColor = m_spriteRenderer.color;
         }
 
         public void Initialize(Vector2Int gridPosition, TileType type)
         {
+            // m_spriteRenderer가 null이면 Awake가 아직 호출되지 않은 것이므로, 여기서 다시 참조를 가져옵니다.
+            if (m_spriteRenderer == null)
+            {
+                m_spriteRenderer = GetComponent<SpriteRenderer>();
+            }
+
+            // 최초 초기화 시에만 원본 색상을 저장합니다.
+            if (!m_isInitialized)
+            {
+                m_originalColor = m_spriteRenderer.color;
+                m_isInitialized = true;
+            }
+
             m_gridPosition = gridPosition;
             m_type = type;
-            m_spriteRenderer.color = m_originalColor;
+
+            // 재사용될 때를 대비해 색상과 알파 값을 복원합니다.
+            m_spriteRenderer.color = m_originalColor; 
+            
+            // 투명도(alpha)도 원래대로 복원합니다.
+            var color = m_spriteRenderer.color;
+            color.a = 1f;
+            m_spriteRenderer.color = color;
         }
         
         public void SetOriginalScale(Vector3 scale)
@@ -45,7 +66,10 @@ namespace Match3
 
         public void ApplySprite(Sprite sprite)
         {
-            if (m_spriteRenderer != null) m_spriteRenderer.sprite = sprite;
+            if (m_spriteRenderer != null)
+            {
+                m_spriteRenderer.sprite = sprite;
+            }
         }
 
         public void SetGridPosition(Vector2Int newPosition)
@@ -59,13 +83,9 @@ namespace Match3
             transform.localRotation = rotation;
         }
 
-        /// <summary>
-        /// 목표 월드 좌표로 이동합니다.
-        /// </summary>
         public async UniTask MoveToAsync(Vector3 targetWorldPosition)
         {
             var cancellationToken = this.GetCancellationTokenOnDestroy();
-            // 다시 월드 좌표 이동(DOMove)을 사용합니다.
             await transform.DOMove(targetWorldPosition, k_MoveDuration)
                            .SetEase(Ease.OutQuad)
                            .ToUniTask(cancellationToken: cancellationToken);

@@ -8,9 +8,9 @@ namespace Match3
         private readonly GameObject m_tilePrefab;
         private readonly Transform m_parent;
         private readonly TileThemeData m_theme;
-        private readonly GameBoard.BoardRotation m_initialRotation;
         
-        private readonly Vector3 m_tileScale; // 계산된 스케일 캐싱
+        private readonly Vector3 m_tileScale;
+        private int m_currentRotationAngle;
 
         private readonly Queue<Tile> m_tilePool = new Queue<Tile>();
 
@@ -19,9 +19,14 @@ namespace Match3
             m_tilePrefab = tilePrefab;
             m_parent = parent;
             m_theme = theme;
-            m_initialRotation = initialRotation;
             
-            m_tileScale = CalculateScale(cellSize); // 생성자에서 스케일 한 번만 계산
+            m_tileScale = CalculateScale(cellSize);
+            UpdateRotation(initialRotation);
+        }
+
+        public void UpdateRotation(GameBoard.BoardRotation newRotation)
+        {
+            m_currentRotationAngle = (int)newRotation * 90;
         }
 
         public Tile Get(Vector3 position, Vector2Int gridPosition, TileType type)
@@ -42,7 +47,6 @@ namespace Match3
                 if (tileComponent == null) return null;
             }
 
-            // 스케일 설정 및 초기화
             tileComponent.SetOriginalScale(m_tileScale);
             tileComponent.Initialize(gridPosition, type);
             
@@ -51,7 +55,7 @@ namespace Match3
             Sprite sprite = m_theme.GetSprite(type);
             tileComponent.ApplySprite(sprite);
 
-            Quaternion inverseRotation = Quaternion.Euler(0, 0, 90 * (int)m_initialRotation);
+            Quaternion inverseRotation = Quaternion.Euler(0, 0, m_currentRotationAngle);
             tileComponent.SetVisualRotation(inverseRotation);
 
             return tileComponent;

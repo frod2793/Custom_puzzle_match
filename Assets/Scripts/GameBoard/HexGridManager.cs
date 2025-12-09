@@ -6,45 +6,38 @@ namespace Match3
     public class HexGridManager : IGridManager
     {
         private Vector2Int m_gridSize;
-        private const float k_OuterRadius = 0.577f;
-        
-        public float CellSize => k_OuterRadius * 2f;
+        private Grid m_unityGrid; // Unity Grid 컴포넌트 참조
 
-        public void Initialize(LevelData levelData)
+        // Unity Grid 컴포넌트의 CellSize를 사용합니다.
+        public float CellSize => m_unityGrid != null ? m_unityGrid.cellSize.x : 1f;
+
+        public void Initialize(LevelData levelData, Grid unityGrid)
         {
             m_gridSize = levelData.GridSize;
+            m_unityGrid = unityGrid; // Grid 컴포넌트 할당
         }
 
         public Vector3 GetLocalPosition(int q, int r)
         {
-            float width = CellSize;
-            float height = Mathf.Sqrt(3f) * k_OuterRadius;
-            
-            float x = width * 3.0f / 4.0f * q;
-            float y = height * (r + q / 2.0f);
-            
-            float xOffset = (m_gridSize.x - 1) * width * 3.0f / 8.0f;
-            float yOffset = (m_gridSize.y - 1) * height / 4.0f;
-
-            return new Vector3(x - xOffset, y - yOffset, 0);
+            if (m_unityGrid == null)
+            {
+                Debug.LogError("Unity Grid reference is null in HexGridManager.");
+                return Vector3.zero;
+            }
+            // Unity Grid 컴포넌트의 CellToLocal 메서드를 사용하여 정확한 로컬 위치를 얻습니다.
+            return m_unityGrid.CellToLocal(new Vector3Int(q, r, 0));
         }
 
         public Vector2Int GetGridPosition(Vector3 worldPosition)
         {
-            // 이 메서드는 현재 GameBoard에서 직접 사용되지 않으므로,
-            // 만약 사용하게 된다면 worldPosition을 localPosition으로 변환하는 로직이 필요합니다.
-            float width = CellSize;
-            float height = Mathf.Sqrt(3f) * k_OuterRadius;
-
-            float xOffset = (m_gridSize.x - 1) * width * 3.0f / 8.0f;
-            float yOffset = (m_gridSize.y - 1) * height / 4.0f;
-            worldPosition.x += xOffset;
-            worldPosition.y += yOffset;
-
-            float q = (2.0f / 3.0f * worldPosition.x) / k_OuterRadius;
-            float r = (-1.0f / 3.0f * worldPosition.x + Mathf.Sqrt(3.0f) / 3.0f * worldPosition.y) / k_OuterRadius;
-            
-            return AxialRound(q, r);
+            if (m_unityGrid == null)
+            {
+                Debug.LogError("Unity Grid reference is null in HexGridManager.");
+                return Vector2Int.zero;
+            }
+            // World to Cell 변환 시, Grid 컴포넌트의 WorldToCell 메서드를 사용합니다.
+            Vector3Int cell = m_unityGrid.WorldToCell(worldPosition);
+            return new Vector2Int(cell.x, cell.y);
         }
         
         private static readonly Vector2Int[] s_axialDirections = 
@@ -61,29 +54,6 @@ namespace Match3
                 neighbors.Add(new Vector2Int(q + dir.x, r + dir.y));
             }
             return neighbors;
-        }
-
-        private Vector2Int AxialRound(float q, float r)
-        {
-            float s = -q - r;
-            int rq = Mathf.RoundToInt(q);
-            int rr = Mathf.RoundToInt(r);
-            int rs = Mathf.RoundToInt(s);
-
-            float q_diff = Mathf.Abs(rq - q);
-            float r_diff = Mathf.Abs(rr - r);
-            float s_diff = Mathf.Abs(rs - s);
-
-            if (q_diff > r_diff && q_diff > s_diff)
-            {
-                rq = -rr - rs;
-            }
-            else if (r_diff > s_diff)
-            {
-                rr = -rq - rs;
-            }
-            
-            return new Vector2Int(rq, rr);
         }
     }
 }

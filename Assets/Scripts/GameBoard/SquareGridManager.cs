@@ -9,9 +9,16 @@ namespace Match3
         
         public float CellSize { get; private set; } = 1.0f;
 
-        public void Initialize(LevelData levelData)
+        // IGridManager 인터페이스 변경에 맞춰 Grid 매개변수를 추가합니다.
+        public void Initialize(LevelData levelData, Grid unityGrid)
         {
             m_gridSize = levelData.GridSize;
+            // SquareGridManager는 unityGrid를 직접 사용하지는 않지만,
+            // 인터페이스 계약을 준수하기 위해 매개변수를 받습니다.
+            if (unityGrid != null)
+            {
+                CellSize = unityGrid.cellSize.x;
+            }
         }
 
         public Vector3 GetLocalPosition(int x, int y)
@@ -24,9 +31,6 @@ namespace Match3
 
         public Vector2Int GetGridPosition(Vector3 worldPosition)
         {
-            // 이 메서드는 현재 GameBoard에서 직접 사용되지 않으므로,
-            // 만약 사용하게 된다면 worldPosition을 localPosition으로 변환하는 로직이 필요합니다.
-            // 예: Vector3 localPosition = gridTransform.InverseTransformPoint(worldPosition);
             float xOffset = (m_gridSize.x - 1) * CellSize / 2.0f;
             float yOffset = (m_gridSize.y - 1) * CellSize / 2.0f;
 
