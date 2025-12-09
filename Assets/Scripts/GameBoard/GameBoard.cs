@@ -6,6 +6,7 @@ using UnityEngine.InputSystem;
 using System.Text;
 using DG.Tweening;
 using Match3.UI;
+using Match3.Effects;
 using System;
 using System.Threading;
 
@@ -17,6 +18,7 @@ namespace Match3
 {
     public class GameBoard : MonoBehaviour
     {
+        //todo : 낙하 이펙트에 약간의 랜덤 딜레이를주어 동시에 낙하 하는 것을 약간이나마 방지 
         public enum BoardRotation { Up = 0, Right = 1, Down = 2, Left = 3 }
 
         [Header("데이터")]
@@ -378,6 +380,12 @@ namespace Match3
                 
                 if (m_tileObjects.ContainsKey(tile.GridPosition))
                 {
+                    // 이펙트 재생 (타일 색상 반영)
+                    if (EffectManager.Instance != null)
+                    {
+                        EffectManager.Instance.PlayEffect(EffectType.TileMatch, tile.transform.position, tile.CurrentColor);
+                    }
+
                     m_tileObjects.Remove(tile.GridPosition);
                     clearTasks.Add(tile.ClearAsync().ContinueWith(() => m_tileFactory.Release(tile)));
                 }
@@ -387,71 +395,80 @@ namespace Match3
 
         #endregion
 
-        #region 낙하 로직 (핵심)
+        #region 낙하 로직 (Step-by-Step Cascade)
 
         private async UniTask CollapseGapsGraphBasedAsync()
         {
             bool moved;
-            int iterationCount = 0;
-            const int k_MaxIterations = 100;
-
-            var allPositions = m_currentLevelData.TilePositions;
-            HashSet<Vector2Int> occupiedPositions = new HashSet<Vector2Int>(m_tileObjects.Keys);
-
-            Dictionary<Tile, Vector3> movingTiles = new Dictionary<Tile, Vector3>();
+            // 스텝별 이동 속도 (짧게 설정하여 끊김 없이 흐르듯이 보이게 함)
+            float stepDuration = 0.12f; 
 
             do
             {
-                if (iterationCount++ > k_MaxIterations) break;
                 moved = false;
                 
-                var sortedSlots = allPositions
-                    .Select(p => new { GridPos = p, WorldPos = GetWorldPositionFromGrid(p.x, p.y) })
-                    .OrderBy(item => item.WorldPos.y) 
+                // 이번 스텝에서 이동할 타일들 예약
+                var moveTasks = new List<UniTask>();
+                
+                // 이동 후의 위치를 임시로 추적하여 중복 이동 방지
+                HashSet<Vector2Int> destinationLocked = new HashSet<Vector2Int>();
+                
+                // 아래쪽 행부터 위쪽으로 검사 (Y 오름차순)
+                var sortedSlots = m_currentLevelData.TilePositions
+                    .OrderBy(p => GetWorldPositionFromGrid(p.x, p.y).y)
                     .ToList();
 
-                foreach (var slot in sortedSlots)
-                {
-                    if (occupiedPositions.Contains(slot.GridPos)) continue;
+                // 이번 턴에 이동할 타일과 목적지 매핑
+                Dictionary<Tile, Vector2Int> pendingMoves = new Dictionary<Tile, Vector2Int>();
 
-                    Tile supplier = GetBestSupplierForSlot(slot.GridPos, slot.WorldPos);
+                foreach (var slotGridPos in sortedSlots)
+                {
+                    // 1. 이미 채워져 있는 칸은 패스
+                    if (m_tileObjects.ContainsKey(slotGridPos)) continue;
+                    
+                    // 2. 이미 이번 턴에 누군가가 오기로 예약된 칸도 패스
+                    if (destinationLocked.Contains(slotGridPos)) continue;
+
+                    // 3. 이 칸을 채워줄 수 있는 '인접한' 공급자 찾기
+                    Tile supplier = GetBestSupplierForSlot(slotGridPos, GetWorldPositionFromGrid(slotGridPos.x, slotGridPos.y));
 
                     if (supplier != null)
                     {
-                        Vector2Int oldPos = supplier.GridPosition;
-                        
-                        m_tileObjects.Remove(oldPos);
-                        occupiedPositions.Remove(oldPos); 
+                        // 4. 공급자가 이미 다른 곳으로 가기로 했으면 패스
+                        if (pendingMoves.ContainsKey(supplier)) continue;
 
-                        m_tileObjects[slot.GridPos] = supplier;
-                        occupiedPositions.Add(slot.GridPos);
-                        
-                        supplier.SetGridPosition(slot.GridPos);
-
-                        movingTiles[supplier] = slot.WorldPos;
-                        
-                        moved = true;
+                        // 이동 예약
+                        pendingMoves[supplier] = slotGridPos;
+                        destinationLocked.Add(slotGridPos); // 목적지 잠금
                     }
                 }
-            } while (moved); 
 
-            if (movingTiles.Count > 0)
-            {
-                var moveTasks = new List<UniTask>();
-                
-                float minY = allPositions.Min(p => GetWorldPositionFromGrid(p.x, p.y).y);
-
-                foreach (var kvp in movingTiles)
+                // 실제 데이터 갱신 및 애니메이션 시작
+                if (pendingMoves.Count > 0)
                 {
-                    Tile tile = kvp.Key;
-                    Vector3 targetPos = kvp.Value;
+                    moved = true;
 
-                    float delay = (targetPos.y - minY) * m_fallStaggerDelay;
-                    moveTasks.Add(AnimateTileMove(tile, targetPos, delay, Ease.OutQuad));
+                    foreach (var kvp in pendingMoves)
+                    {
+                        Tile tile = kvp.Key;
+                        Vector2Int newPos = kvp.Value;
+                        Vector2Int oldPos = tile.GridPosition;
+
+                        // 논리적 위치 이동
+                        m_tileObjects.Remove(oldPos);
+                        m_tileObjects[newPos] = tile;
+                        tile.SetGridPosition(newPos);
+
+                        // 시각적 이동 (한 칸 이동)
+                        Vector3 targetWorldPos = GetWorldPositionFromGrid(newPos.x, newPos.y);
+                        moveTasks.Add(tile.transform.DOMove(targetWorldPos, stepDuration).SetEase(Ease.Linear).ToUniTask());
+                    }
+
+                    // 모든 타일이 한 칸씩 움직일 때까지 대기
+                    await UniTask.WhenAll(moveTasks);
                 }
 
-                await UniTask.WhenAll(moveTasks);
-            }
+            } while (moved); // 더 이상 움직일 타일이 없을 때까지 반복
         }
 
         private Tile GetBestSupplierForSlot(Vector2Int targetGridPos, Vector3 targetWorldPos)
@@ -459,20 +476,29 @@ namespace Match3
             if (!m_adjacencyGraph.TryGetValue(targetGridPos, out var neighbors)) return null;
 
             Tile bestCandidate = null;
-            float bestScore = -1f;
+            float bestScore = float.MinValue;
             Vector3 upDir = Vector3.up; 
 
             foreach (var neighborPos in neighbors)
             {
+                // 빈 칸이나, 이미 이동 중인 칸은 공급자가 될 수 없음
+                // (하지만 여기서는 m_tileObjects만 보므로, 루프 내 pendingMoves 체크가 중요)
                 if (!m_tileObjects.TryGetValue(neighborPos, out Tile candidateTile)) continue;
 
                 Vector3 candidatePos = GetWorldPositionFromGrid(neighborPos.x, neighborPos.y); 
-                Vector3 dirToCandidate = (candidatePos - targetWorldPos).normalized;
+                Vector3 vectorToCandidate = candidatePos - targetWorldPos;
+                Vector3 dirToCandidate = vectorToCandidate.normalized;
+                float distance = vectorToCandidate.magnitude;
 
-                float score = Vector3.Dot(dirToCandidate, upDir);
+                float dot = Vector3.Dot(dirToCandidate, upDir);
 
-                if (score > 0.45f) 
+                // [조건] 낙하 허용 각도 (0.8 이상) - 수직 혹은 그에 준하는 위쪽
+                if (dot > 0.8f) 
                 {
+                    // 점수 = (내적 * 10) - 거리
+                    // 거리가 가까울수록(작을수록) 유리. 바로 위(거리1)가 저 위(거리2)보다 우선됨.
+                    float score = (dot * 10f) - distance;
+
                     if (score > bestScore)
                     {
                         bestScore = score;

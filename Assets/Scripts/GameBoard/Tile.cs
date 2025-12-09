@@ -16,6 +16,28 @@ namespace Match3
         public Vector2Int GridPosition => m_gridPosition;
 
         private SpriteRenderer m_spriteRenderer;
+        
+        /// <summary>
+        /// 타일의 타입에 따른 대표 색상을 반환합니다.
+        /// </summary>
+        public Color CurrentColor
+        {
+            get
+            {
+                switch (m_type)
+                {
+                    case TileType.Normal_Red: return new Color(1f, 0.3f, 0.3f); // Red
+                    case TileType.Normal_Green: return new Color(0.3f, 1f, 0.3f); // Green
+                    case TileType.Normal_Blue: return new Color(0.3f, 0.6f, 1f); // Blue
+                    case TileType.Normal_Yellow: return new Color(1f, 0.9f, 0.2f); // Yellow
+                    case TileType.Normal_Purple: return new Color(0.8f, 0.4f, 1f); // Purple
+                    case TileType.Bomb: return Color.black;
+                    case TileType.Rocket: return Color.white;
+                    default: return Color.white;
+                }
+            }
+        }
+
         private Vector3 m_originalScale;
         private Color m_originalColor;
 
