@@ -855,8 +855,11 @@ MonoBehaviour:
   m_squareGridContainer: {fileID: 1055741135}
   m_hexagonGridContainer: {fileID: 533733378}
   m_tilePrefab: {fileID: 3791841684372505751, guid: 0789f9230fd174f4e98bc10571a2d4e9, type: 3}
-  m_fallSpeed: 10
-  m_fallStaggerDelay: 0.03
+  m_refillMoveSpeed: 9
+  m_fallStaggerDelay: 0.08
+  m_gravityMoveSpeed: 14
+  m_refillHeightDelayFactor: 0.2
+  m_refillRandomFactor: 0.25
 --- !u!4 &997647655
 Transform:
   m_ObjectHideFlags: 0

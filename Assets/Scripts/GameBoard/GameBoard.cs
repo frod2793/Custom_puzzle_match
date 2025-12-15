@@ -18,7 +18,6 @@ namespace Match3
 {
     public class GameBoard : MonoBehaviour
     {
-        //todo : 낙하 이펙트에 약간의 랜덤 딜레이를주어 동시에 낙하 하는 것을 약간이나마 방지 
         public enum BoardRotation { Up = 0, Right = 1, Down = 2, Left = 3 }
 
         [Header("데이터")]
@@ -36,11 +35,21 @@ namespace Match3
         [SerializeField] private GameObject m_tilePrefab;
 
         [Header("설정")]
-        [Tooltip("타일이 낙하하는 속도 (Units per Second). 값이 클수록 빠르게 떨어집니다.")]
-        [SerializeField] private float m_fallSpeed = 15.0f; 
+        [Tooltip("리필 시 타일이 낙하하는 속도 (Units per Second).")]
+        [SerializeField] private float m_refillMoveSpeed = 15.0f; // Renamed from m_fallSpeed
 
         [Tooltip("낙하 시 웨이브 효과를 주기 위한 지연 시간 계수")]
         [SerializeField] private float m_fallStaggerDelay = 0.08f; 
+
+        [Header("애니메이션 상세 설정")]
+        [Tooltip("일반 낙하(Collapse) 시 타일 이동 속도 (Units per Second).")]
+        [SerializeField] private float m_gravityMoveSpeed = 9.0f; // Replaced m_collapseStepDuration
+
+        [Tooltip("리필 시 높이에 따른 지연 가중치. 클수록 아래쪽이 먼저 차오르는 느낌이 강해집니다.")]
+        [SerializeField] private float m_refillHeightDelayFactor = 0.2f;
+
+        [Tooltip("리필 시 추가되는 무작위 지연 시간의 최대값 (초)")]
+        [SerializeField] private float m_refillRandomFactor = 0.25f; 
 
         private LevelData m_currentLevelData;
         private Transform m_gridTransform;
@@ -66,6 +75,15 @@ namespace Match3
         private Camera m_mainCamera;
         private Action m_onRotateButtonPressedAction;
         
+        // 최적화용 캐시 필드 (Zero Allocation)
+        private List<Vector2Int> m_sortedTilePositionsByY; // Collapse용 미리 정렬된 좌표 리스트
+        private readonly List<UniTask> m_cachedMoveTasks = new List<UniTask>(64);
+        private readonly HashSet<Vector2Int> m_cachedDestinationLocked = new HashSet<Vector2Int>();
+        private readonly Dictionary<Tile, Vector2Int> m_cachedPendingMoves = new Dictionary<Tile, Vector2Int>();
+        private readonly List<Vector2Int> m_cachedEmptyPositions = new List<Vector2Int>(64);
+        private readonly HashSet<Tile> m_cachedMatchSet = new HashSet<Tile>();
+        private readonly List<Vector3> m_cachedMatchDirections = new List<Vector3>(6); // Hexagon 고려하여 넉넉히
+        
         #region Unity 라이프사이클
 
         private void Awake()
@@ -73,6 +91,7 @@ namespace Match3
             m_mainCamera = Camera.main;
             InitializeBoardAndLevelData();
             InitializeGrid();
+            InitializeOptimizationCache(); // [수정] Grid 생성 후 캐시 초기화 (NRE 방지)
             
             m_onRotateButtonPressedAction = () => RotateBoard().Forget();
         }
@@ -124,11 +143,25 @@ namespace Match3
 
         private void InitializeBoardAndLevelData()
         {
-            int levelID = GameSettings.SelectedLevelID < 0 ? 0 : GameSettings.SelectedLevelID;
-            m_currentLevelData = m_levelDatabase != null ? m_levelDatabase.GetLevel(levelID) : null;
+            if (GameSettings.CurrentPlayMode == PlayMode.Infinite)
+            {
+                // [무한 모드] 런타임 생성
+                m_currentLevelData = GenerateInfiniteLevelData(GameSettings.CurrentBoardMode);
+            }
+            else
+            {
+                // [스테이지 모드] DB 로드
+                int levelID = GameSettings.SelectedLevelID < 0 ? 0 : GameSettings.SelectedLevelID;
+                m_currentLevelData = m_levelDatabase != null ? m_levelDatabase.GetLevel(levelID) : null;
+            }
 
             if (m_currentLevelData == null) return;
             
+            // ... (이후 로직 동일)
+            
+            // [제거] 여기서 GetWorldPositionFromGrid 호출 시 m_gridManager가 없어서 NRE 발생함.
+            // InitializeOptimizationCache()로 이동.
+
             if (m_mainGrid != null)
             {
                 if (m_currentLevelData.GridType == GridType.Hexagon)
@@ -153,6 +186,84 @@ namespace Match3
             }
         }
 
+        private LevelData GenerateInfiniteLevelData(BoardMode boardMode)
+        {
+            LevelData newLevel = ScriptableObject.CreateInstance<LevelData>();
+            List<Vector2Int> positions = new List<Vector2Int>();
+            GridType gridType;
+            Vector2Int gridSize;
+
+            if (boardMode == BoardMode.Hexagon)
+            {
+                gridType = GridType.Hexagon;
+                // 육각형: 반지름 4 (q, r 좌표계)
+                int radius = 4;
+                for (int q = -radius; q <= radius; q++)
+                {
+                    int r1 = Mathf.Max(-radius, -q - radius);
+                    int r2 = Mathf.Min(radius, -q + radius);
+                    for (int r = r1; r <= r2; r++)
+                    {
+                        positions.Add(new Vector2Int(q, r));
+                    }
+                }
+                gridSize = new Vector2Int(radius * 2 + 1, radius * 2 + 1);
+            }
+            else
+            {
+                gridType = GridType.Square;
+                // 사각형: 9x9 (-4~4)
+                int ext = 4; 
+                for (int x = -ext; x <= ext; x++)
+                {
+                    for (int y = -ext; y <= ext; y++)
+                    {
+                        positions.Add(new Vector2Int(x, y));
+                    }
+                }
+                gridSize = new Vector2Int(9, 9);
+            }
+
+            newLevel.SetupRuntimeLevel(gridType, gridSize, positions);
+            newLevel.name = "Infinite_Procedural_Level";
+            return newLevel;
+        }
+
+        private void InitializeOptimizationCache()
+        {
+            if (m_currentLevelData == null) return;
+
+            // [최적화] Y축 기준 정렬 리스트 미리 생성 (Bottom-Up)
+            // m_gridManager가 초기화된 이후에 호출되어야 함
+            m_sortedTilePositionsByY = m_currentLevelData.TilePositions
+                .OrderBy(p => GetWorldPositionFromGrid(p.x, p.y).y)
+                .ToList();
+            
+            // [최적화] 매치 방향 캐싱 (초기 1회)
+            CacheMatchDirections();
+        }
+
+        // [최적화] 매치 방향 미리 계산
+        private void CacheMatchDirections()
+        {
+            m_cachedMatchDirections.Clear();
+            if (m_currentLevelData.GridType == GridType.Hexagon)
+            {
+                Vector3[] localDirs = new Vector3[] 
+                { 
+                    Vector3.up,                                  
+                    Quaternion.Euler(0,0,-60) * Vector3.up,      
+                    Quaternion.Euler(0,0,60) * Vector3.up        
+                };
+                foreach(var ld in localDirs) m_cachedMatchDirections.Add(m_gridTransform.TransformDirection(ld));
+            }
+            else 
+            {
+                m_cachedMatchDirections.Add(m_gridTransform.TransformDirection(Vector3.right));
+                m_cachedMatchDirections.Add(m_gridTransform.TransformDirection(Vector3.up));
+            }
+        }
+
         private void InitializeGrid()
         {
             if (m_currentLevelData == null) return;
@@ -163,7 +274,8 @@ namespace Match3
         private void CreateTiles()
         {
             m_tileObjects.Clear(); 
-
+            
+            // 기존 타일 초기화 로직 유지
             foreach (var pos in m_currentLevelData.TilePositions)
             {
                 if (m_tileObjects.ContainsKey(pos)) continue;
@@ -400,26 +512,23 @@ namespace Match3
         private async UniTask CollapseGapsGraphBasedAsync()
         {
             bool moved;
-            // 스텝별 이동 속도 (짧게 설정하여 끊김 없이 흐르듯이 보이게 함)
-            float stepDuration = 0.12f; 
+            // 스텝별 이동 시간 계산 (거리 1 / 속도)
+            // m_gravityMoveSpeed가 클수록 stepDuration은 작아짐 (빠름)
+            float stepDuration = m_gravityMoveSpeed > 0 ? 1.0f / m_gravityMoveSpeed : 0.1f;
 
             do
             {
                 moved = false;
                 
-                // 이번 스텝에서 이동할 타일들 예약
-                var moveTasks = new List<UniTask>();
+                // [최적화] 컬렉션 재사용 (Clear)
+                m_cachedMoveTasks.Clear();
+                m_cachedDestinationLocked.Clear();
+                m_cachedPendingMoves.Clear();
                 
-                // 이동 후의 위치를 임시로 추적하여 중복 이동 방지
-                HashSet<Vector2Int> destinationLocked = new HashSet<Vector2Int>();
-                
-                // 아래쪽 행부터 위쪽으로 검사 (Y 오름차순)
-                var sortedSlots = m_currentLevelData.TilePositions
-                    .OrderBy(p => GetWorldPositionFromGrid(p.x, p.y).y)
-                    .ToList();
-
-                // 이번 턴에 이동할 타일과 목적지 매핑
-                Dictionary<Tile, Vector2Int> pendingMoves = new Dictionary<Tile, Vector2Int>();
+                // [최적화] Y축 정렬은 미리 계산된 리스트 사용 (m_sortedTilePositionsByY)
+                // 만약 레벨 데이터가 동적으로 바뀐다면 여기서 다시 정렬해야 하지만, 정적이라면 캐시 사용 가능.
+                // 안전을 위해 null 체크
+                var sortedSlots = m_sortedTilePositionsByY ?? m_currentLevelData.TilePositions;
 
                 foreach (var slotGridPos in sortedSlots)
                 {
@@ -427,7 +536,7 @@ namespace Match3
                     if (m_tileObjects.ContainsKey(slotGridPos)) continue;
                     
                     // 2. 이미 이번 턴에 누군가가 오기로 예약된 칸도 패스
-                    if (destinationLocked.Contains(slotGridPos)) continue;
+                    if (m_cachedDestinationLocked.Contains(slotGridPos)) continue;
 
                     // 3. 이 칸을 채워줄 수 있는 '인접한' 공급자 찾기
                     Tile supplier = GetBestSupplierForSlot(slotGridPos, GetWorldPositionFromGrid(slotGridPos.x, slotGridPos.y));
@@ -435,20 +544,20 @@ namespace Match3
                     if (supplier != null)
                     {
                         // 4. 공급자가 이미 다른 곳으로 가기로 했으면 패스
-                        if (pendingMoves.ContainsKey(supplier)) continue;
+                        if (m_cachedPendingMoves.ContainsKey(supplier)) continue;
 
                         // 이동 예약
-                        pendingMoves[supplier] = slotGridPos;
-                        destinationLocked.Add(slotGridPos); // 목적지 잠금
+                        m_cachedPendingMoves[supplier] = slotGridPos;
+                        m_cachedDestinationLocked.Add(slotGridPos); // 목적지 잠금
                     }
                 }
 
                 // 실제 데이터 갱신 및 애니메이션 시작
-                if (pendingMoves.Count > 0)
+                if (m_cachedPendingMoves.Count > 0)
                 {
                     moved = true;
 
-                    foreach (var kvp in pendingMoves)
+                    foreach (var kvp in m_cachedPendingMoves)
                     {
                         Tile tile = kvp.Key;
                         Vector2Int newPos = kvp.Value;
@@ -461,11 +570,12 @@ namespace Match3
 
                         // 시각적 이동 (한 칸 이동)
                         Vector3 targetWorldPos = GetWorldPositionFromGrid(newPos.x, newPos.y);
-                        moveTasks.Add(tile.transform.DOMove(targetWorldPos, stepDuration).SetEase(Ease.Linear).ToUniTask());
+                        // [수정] Linear 이동 (Gravity Speed 적용)
+                        m_cachedMoveTasks.Add(tile.transform.DOMove(targetWorldPos, stepDuration).SetEase(Ease.Linear).ToUniTask());
                     }
 
                     // 모든 타일이 한 칸씩 움직일 때까지 대기
-                    await UniTask.WhenAll(moveTasks);
+                    await UniTask.WhenAll(m_cachedMoveTasks);
                 }
 
             } while (moved); // 더 이상 움직일 타일이 없을 때까지 반복
@@ -541,17 +651,23 @@ namespace Match3
             var refillTasks = new List<UniTask>();
             var ct = this.GetCancellationTokenOnDestroy();
 
-            var emptyPositions = m_currentLevelData.TilePositions
-                .Where(p => !m_tileObjects.ContainsKey(p))
-                .ToList();
+            // [최적화] LINQ Where 제거 및 cached list 사용
+            m_cachedEmptyPositions.Clear();
+            foreach(var p in m_currentLevelData.TilePositions)
+            {
+                if (!m_tileObjects.ContainsKey(p))
+                {
+                    m_cachedEmptyPositions.Add(p);
+                }
+            }
 
-            if (emptyPositions.Count == 0) return;
+            if (m_cachedEmptyPositions.Count == 0) return;
 
             float minY = m_currentLevelData.TilePositions.Min(p => GetWorldPositionFromGrid(p.x, p.y).y);
             float cameraTopY = m_mainCamera.transform.position.y + m_mainCamera.orthographicSize;
             float spawnOffset = m_gridManager.CellSize * 2f;
 
-            foreach (var gridPos in emptyPositions)
+            foreach (var gridPos in m_cachedEmptyPositions)
             {
                 if (m_tileObjects.ContainsKey(gridPos)) continue;
 
@@ -564,8 +680,12 @@ namespace Match3
 
                 m_tileObjects[gridPos] = newTile; 
                 
-                float delay = (targetWorldPos.y - minY) * m_fallStaggerDelay;
-                refillTasks.Add(AnimateTileMove(newTile, targetWorldPos, delay, Ease.OutBounce));
+                // [수정] Bottom-Up 채우기 구현
+                float heightFactor = (targetWorldPos.y - minY) * m_refillHeightDelayFactor; 
+                float randomNoise = UnityEngine.Random.Range(0.0f, m_refillRandomFactor);
+                float finalDelay = heightFactor + randomNoise;
+
+                refillTasks.Add(AnimateTileMove(newTile, targetWorldPos, finalDelay, Ease.OutBounce));
             }
             await UniTask.WhenAll(refillTasks);
         }
@@ -577,7 +697,8 @@ namespace Match3
             if (ct.IsCancellationRequested) return;
             
             float distance = Vector3.Distance(tile.transform.position, targetPos);
-            float duration = m_fallSpeed > 0 ? distance / m_fallSpeed : 0.1f;
+            // [수정] m_refillMoveSpeed 사용 (리필 전용 속도)
+            float duration = m_refillMoveSpeed > 0 ? distance / m_refillMoveSpeed : 0.1f;
 
             await tile.transform.DOMove(targetPos, duration)
                 .SetEase(easeType)
@@ -590,46 +711,27 @@ namespace Match3
 
         private List<Tile> FindAllMatchesGraphBased()
         {
-            var allMatches = new HashSet<Tile>();
+            // [최적화] 캐시된 HashSet 재사용
+            m_cachedMatchSet.Clear();
 
-            // [수정] 매치 검사 방향을 로컬 공간 기준으로 정의하고 월드로 변환
-            // 보드가 회전하더라도 "타일 기준의 위/아래/대각선"을 정확히 추적하기 위함
-            List<Vector3> matchDirections = new List<Vector3>();
-
-            if (m_currentLevelData.GridType == GridType.Hexagon)
-            {
-                // Flat Top Hexagon의 Local Axes
-                Vector3[] localDirs = new Vector3[] 
-                { 
-                    Vector3.up,                                  
-                    Quaternion.Euler(0,0,-60) * Vector3.up,      
-                    Quaternion.Euler(0,0,60) * Vector3.up        
-                };
-                // 현재 Grid Transform의 회전을 반영하여 월드 방향으로 변환
-                foreach(var ld in localDirs) matchDirections.Add(m_gridTransform.TransformDirection(ld));
-            }
-            else 
-            {
-                // Square Grid Local Axes
-                matchDirections.Add(m_gridTransform.TransformDirection(Vector3.right));
-                matchDirections.Add(m_gridTransform.TransformDirection(Vector3.up));
-            }
+            // [최적화] 매치 방향은 Awake/Rotate 시점에 계산된 m_cachedMatchDirections 사용
 
             foreach (var kvp in m_tileObjects)
             {
                 Tile startTile = kvp.Value;
                 if (startTile == null) continue;
 
-                foreach (var dir in matchDirections)
+                foreach (var dir in m_cachedMatchDirections)
                 {
                     List<Tile> line = GetMatchLine(startTile, dir);
                     if (line.Count >= 3)
                     {
-                        foreach (var t in line) allMatches.Add(t);
+                        foreach (var t in line) m_cachedMatchSet.Add(t);
                     }
                 }
             }
-            return allMatches.ToList();
+            // 반환 타입 호환성을 위해 ToList() 사용 (필요시 리턴 타입도 void로 바꾸고 내부 처리가능)
+            return m_cachedMatchSet.ToList();
         }
 
         private List<Tile> GetMatchLine(Tile startTile, Vector3 worldDir)
@@ -728,6 +830,9 @@ namespace Match3
                 .ToUniTask();
             
             AnalyzeBoardStructure();
+            // [최적화] 회전 후 방향 재계산 (캐시 업데이트)
+            CacheMatchDirections();
+
             await CollapseGapsGraphBasedAsync();
             
             var newMatches = FindAllMatchesGraphBased();

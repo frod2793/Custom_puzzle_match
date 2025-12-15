@@ -34,5 +34,15 @@ namespace Match3
             UnityEditor.EditorUtility.SetDirty(this);
         }
 #endif
+
+        /// <summary>
+        /// 런타임(무한 모드 등)에서 절차적으로 레벨 데이터를 설정하기 위해 사용합니다.
+        /// </summary>
+        public void SetupRuntimeLevel(GridType gridType, Vector2Int gridSize, List<Vector2Int> tilePositions)
+        {
+            m_gridType = gridType;
+            m_gridSize = gridSize;
+            m_tilePositions = tilePositions;
+        }
     }
 }
