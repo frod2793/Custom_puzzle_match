@@ -1,7 +1,12 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using TMPro; // TextMeshProUGUI 사용을 위해 추가
+using TMPro;
+using DG.Tweening;
+using Cysharp.Threading.Tasks;
+using System;
+
+using EasyTransition; // EasyTransition 사용
 
 namespace Match3
 {
@@ -15,12 +20,20 @@ namespace Match3
         [SerializeField] private GameObject m_levelButtonPrefab;
         [SerializeField] private Transform m_levelButtonContainer;
 
+        [Header("Title Screen")]
+        [SerializeField] private GameObject m_titlePanel;
+        [SerializeField] private Button m_boardButton; // Inspector에서 이것만 할당하면 됨
+        private RectTransform m_boardButtonRect; // 코드로 가져옴
+        [SerializeField] private TransitionSettings m_titleTransitionSettings; // EasyTransition 설정
+
         [Header("UI 패널 (계층 구조)")]
+        [SerializeField] private GameObject m_lobbyPanel;       // 2단계 ~ 4단계의 부모 패널
         [SerializeField] private GameObject m_boardModePanel;   // 1단계: Square / Hexagon
         [SerializeField] private GameObject m_playModePanel;    // 2단계: Stage / Infinite
         [SerializeField] private GameObject m_stageSelectPanel; // 3단계: Level List
 
         private const string k_GameSceneName = "Game";
+        private Sequence m_titleSequence;
 
         private void Start()
         {
@@ -30,9 +43,119 @@ namespace Match3
                 return;
             }
 
-            // 초기 상태: 보드 모드 선택 화면 표시
+            // 초기 상태: 타이틀 화면 표시
+            ShowPanel(m_titlePanel);
+            
+            // 버튼 이벤트 연결 및 RectTransform 가져오기
+            if (m_boardButton != null)
+            {
+                m_boardButtonRect = m_boardButton.GetComponent<RectTransform>();
+                
+                m_boardButton.onClick.RemoveAllListeners();
+                m_boardButton.onClick.AddListener(OnTitleBoardClicked);
+            }
+
+            // 타이틀 애니메이션 시작
+            AnimateBoardButton();
+        }
+
+        private void OnDestroy()
+        {
+            // DOTween 시퀀스 정리
+            if (m_titleSequence != null)
+            {
+                m_titleSequence.Kill();
+            }
+        }
+
+        #region Title Screen
+
+        /// <summary>
+        /// 보드 버튼이 3초마다 45도씩 회전하는 애니메이션을 설정합니다.
+        /// </summary>
+        private void AnimateBoardButton()
+        {
+            if (m_boardButtonRect == null) return;
+
+            // 기존 시퀀스가 있다면 제거
+            if (m_titleSequence != null) m_titleSequence.Kill();
+
+            m_titleSequence = DOTween.Sequence();
+            
+            // 3초 대기 후 0.5초 동안 -90도 회전 (반복)
+            // "3초마다" -> 2.5초 대기 + 0.5초 회전
+            m_titleSequence.AppendInterval(2.5f);
+            m_titleSequence.Append(m_boardButtonRect.DORotate(new Vector3(0, 0, -90), 0.5f, RotateMode.LocalAxisAdd).SetEase(Ease.OutBack));
+            m_titleSequence.SetLoops(-1, LoopType.Incremental);
+        }
+
+        /// <summary>
+        /// 보드 버튼 클릭 시 호출됩니다. 타이틀에서 로비(모드 선택)로 전환합니다.
+        /// </summary>
+        public void OnTitleBoardClicked()
+        {
+            if (m_boardButton != null) m_boardButton.interactable = false;
+            
+            // 회전 애니메이션 중지
+            if (m_titleSequence != null) m_titleSequence.Pause();
+
+            // 1. 버튼 클릭 피드백 (Punch Scale)
+            if (m_boardButtonRect != null)
+            {
+                m_boardButtonRect.DOPunchScale(Vector3.one * 0.1f, 0.2f, 10, 1).OnComplete(() =>
+                {
+                    // 2. EasyTransition 시작
+                    StartTitleTransition();
+                });
+            }
+            else
+            {
+                StartTitleTransition();
+            }
+        }
+
+        private void StartTitleTransition()
+        {
+            if (m_titleTransitionSettings == null)
+            {
+                Debug.LogError("[TitleManager] Transition Settings가 할당되지 않았습니다! 기본 전환을 수행합니다.");
+                ShowPanel(m_boardModePanel);
+                return;
+            }
+
+            // TransitionManager 인스턴스 확인
+            var transitionManager = TransitionManager.Instance();
+            if (transitionManager == null)
+            {
+                Debug.LogError("[TitleManager] 씬에 TransitionManager가 없습니다!");
+                ShowPanel(m_boardModePanel);
+                return;
+            }
+
+            // 이벤트 구독 (컷 포인트 도달 시 패널 교체)
+            // 중복 구독 방지를 위해 먼저 제거
+            transitionManager.onTransitionCutPointReached -= OnTitleTransitionCutPoint;
+            transitionManager.onTransitionCutPointReached += OnTitleTransitionCutPoint;
+
+            // 트랜지션 시작 (Scene 로드 없이 효과만 재생)
+            transitionManager.Transition(m_titleTransitionSettings, 0f);
+        }
+
+        private void OnTitleTransitionCutPoint()
+        {
+            // 이벤트 구독 해제 (일회성)
+            var transitionManager = TransitionManager.Instance();
+            if (transitionManager != null)
+            {
+                transitionManager.onTransitionCutPointReached -= OnTitleTransitionCutPoint;
+            }
+
+            // 패널 교체: Title -> BoardMode
+            if (m_titlePanel != null) m_titlePanel.SetActive(false);
             ShowPanel(m_boardModePanel);
         }
+
+        #endregion
 
         #region 1단계: 보드 모드 선택
 
@@ -82,10 +205,61 @@ namespace Match3
             {
                 ShowPanel(m_boardModePanel);
             }
+            else if (m_boardModePanel.activeSelf)
+            {
+                // 보드 모드에서 뒤로가기 -> 타이틀로
+                StartBackToTitleTransition();
+            }
+        }
+
+        private void StartBackToTitleTransition()
+        {
+            if (m_titleTransitionSettings == null)
+            {
+                // 설정 없으면 즉시 이동
+                GoBackToTitleImmediate();
+                return;
+            }
+
+            var transitionManager = TransitionManager.Instance();
+            if (transitionManager == null)
+            {
+                GoBackToTitleImmediate();
+                return;
+            }
+
+             transitionManager.onTransitionCutPointReached -= OnBackToTitleCutPoint;
+             transitionManager.onTransitionCutPointReached += OnBackToTitleCutPoint;
+             transitionManager.Transition(m_titleTransitionSettings, 0f);
+        }
+
+        private void OnBackToTitleCutPoint()
+        {
+            var transitionManager = TransitionManager.Instance();
+            if (transitionManager != null)
+            {
+                transitionManager.onTransitionCutPointReached -= OnBackToTitleCutPoint;
+            }
+
+            GoBackToTitleImmediate();
+        }
+
+        private void GoBackToTitleImmediate()
+        {
+            ShowPanel(m_titlePanel);
+            
+            if (m_boardButton != null) m_boardButton.interactable = true;
+            AnimateBoardButton(); // 애니메이션 재시작
         }
 
         private void ShowPanel(GameObject panelToShow)
         {
+            if (m_titlePanel) m_titlePanel.SetActive(panelToShow == m_titlePanel);
+            
+            // 로비 패널 그룹(BoardMode, PlayMode, StageSelect) 중 하나가 활성화되면 로비 패널도 켭니다.
+            bool isLobbySubPanel = (panelToShow == m_boardModePanel || panelToShow == m_playModePanel || panelToShow == m_stageSelectPanel);
+            if (m_lobbyPanel) m_lobbyPanel.SetActive(isLobbySubPanel);
+
             if (m_boardModePanel) m_boardModePanel.SetActive(panelToShow == m_boardModePanel);
             if (m_playModePanel) m_playModePanel.SetActive(panelToShow == m_playModePanel);
             if (m_stageSelectPanel) m_stageSelectPanel.SetActive(panelToShow == m_stageSelectPanel);

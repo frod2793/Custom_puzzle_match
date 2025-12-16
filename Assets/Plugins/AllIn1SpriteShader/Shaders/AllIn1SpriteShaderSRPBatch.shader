@@ -340,7 +340,5 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderSRPBatch"
     }
 
 	Fallback "AllIn1SpriteShader/AllIn1SpriteShader"
-
-	CustomEditor "AllIn1SpriteShaderMaterialInspector"
-	//Fallback "Sprites/Default" //Remove fallback so that any shader error is obvious to the user
+	CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderMaterialInspector"
 }

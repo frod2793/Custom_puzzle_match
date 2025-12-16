@@ -1,5 +1,5 @@
 BEGIN_OPTIONS
-	CustomEditor "AllIn1SpriteShaderLitMaterialInspector"
+	CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderLitMaterialInspector"
 	ShaderName "AllIn1SpriteShader/AllIn1SpriteShaderLit_BetterShader"
 END_OPTIONS
 	

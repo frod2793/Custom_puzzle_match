@@ -17704,5 +17704,5 @@ ZWrite On
    }
    
    
-   CustomEditor "AllIn1SpriteShaderLitMaterialInspector"
+   CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderLitMaterialInspector"
 }

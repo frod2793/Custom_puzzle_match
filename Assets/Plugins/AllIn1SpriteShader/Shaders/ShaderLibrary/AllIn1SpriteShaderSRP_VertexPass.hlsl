@@ -19,9 +19,12 @@ v2f vert(appdata v)
 		camUp = mul((half3x3)unity_CameraToWorld, half3(0,1,0));
 	#endif
 		half3 localPos = v.vertex.x * camRight + v.vertex.y * camUp;
+		localPos.xy *= unity_SpriteProps.xy;
 		o.vertex = TransformObjectToHClip(half4(localPos, 1).xyz);
 	#else
-		o.vertex = TransformObjectToHClip(v.vertex.xyz);
+		half3 localPos = v.vertex.xyz;
+		localPos.xy *= unity_SpriteProps.xy;
+		o.vertex = TransformObjectToHClip(localPos);
 	#endif
 		o.uv = /*TRANSFORM_TEX(v.uv, _MainTex)*/v.uv * _MainTex_ScaleAndTiling.xy + _MainTex_ScaleAndTiling.zw;
 		o.color = v.color;

@@ -26443,5 +26443,5 @@ void Frag(  VertexToPixel v2f
 
    
    
-   CustomEditor "AllIn1SpriteShaderLitMaterialInspector"
+   CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderLitMaterialInspector"
 }

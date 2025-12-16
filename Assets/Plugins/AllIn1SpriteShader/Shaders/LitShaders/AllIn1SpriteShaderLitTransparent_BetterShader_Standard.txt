@@ -17721,5 +17721,5 @@ Shader "AllIn1SpriteShader/AllIn1SpriteShaderLitTransparent_BetterShader"
    }
    
    
-   CustomEditor "AllIn1SpriteShaderLitMaterialInspector"
+   CustomEditor "AllIn1SpriteShader.AllIn1SpriteShaderLitMaterialInspector"
 }
