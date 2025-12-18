@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ecdfcff72a17b594484d7983e0241bdd, type: 3}
-  m_Name: LevelData_2
+  m_Name: H_LevelData_2
   m_EditorClassIdentifier: Assembly-CSharp::Match3.LevelData
   m_gridType: 1
   m_gridSize: {x: 0, y: 0}

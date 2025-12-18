@@ -50,6 +50,7 @@ namespace AllIn1SpriteShader
 
             GUILayout.Label("General Properties", bigLabelStyle);
             DrawProperty(0);
+			DrawProperty(177);
             DrawProperty(1);
             DrawProperty(2);
 
@@ -96,8 +97,9 @@ namespace AllIn1SpriteShader
             if(currEnabledDrawers[colorFxShapeDrawer])
             {
                 Glow("Glow", "GLOW_ON");
-                GenericEffect("Fade", "FADE_ON", 7, 13);
-                Outline("Outline", "OUTBASE_ON");
+				Fade("Fade", "FADE_ON");
+
+				Outline("Outline", "OUTBASE_ON");
                 GenericEffect("Alpha Outline", "ALPHAOUTLINE_ON", 26, 30, true, "A more performant but less flexible outline");
                 InnerOutline("Inner Outline", "INNEROUTLINE_ON", 66, 69);
                 Gradient("Gradient & Radial Gradient", "GRADIENT_ON");
@@ -115,7 +117,7 @@ namespace AllIn1SpriteShader
                 GenericEffect("Ghost", "GHOST_ON", 64, 65, true, "This effect will not affect the outline", new int[] { 157 });
                 GenericEffect("Hologram", "HOLOGRAM_ON", 73, 77, true, null, new int[] { 140, 158 });
                 GenericEffect("Chromatic Aberration", "CHROMABERR_ON", 78, 79);
-                GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139 });
+                GenericEffect("Glitch", "GLITCH_ON", 80, 80, true, null, new int[] { 139, 184 });
                 GenericEffect("Flicker", "FLICKER_ON", 81, 83);
                 GenericEffect("Shadow", "SHADOW_ON", 84, 87);
                 GenericEffect("Shine", "SHINE_ON", 133, 138);
@@ -141,7 +143,7 @@ namespace AllIn1SpriteShader
                 GenericEffect("Radial Clipping / Radial Fill", "RADIALCLIPPING_ON", 164, 166);
                 GenericEffect("Texture Scroll", "TEXTURESCROLL_ON", 106, 107, true, "Set Texture Wrap Mode to Repeat");
                 GenericEffect("Zoom", "ZOOMUV_ON", 108, 108);
-                GenericEffect("Distortion", "DISTORT_ON", 109, 112);
+                GenericEffect("Distortion", "DISTORT_ON", 109, 112, true, null, new int[] { 182 });
                 GenericEffect("Warp Distortion", "WARP_ON", 167, 169);
                 GenericEffect("Twist", "TWISTUV_ON", 113, 116);
                 GenericEffect("Rotate", "ROTATEUV_ON", 117, 117, true, "_Tip_ Use Clipping effect to avoid possible undesired parts");
@@ -274,6 +276,46 @@ namespace AllIn1SpriteShader
             else targetMat.DisableKeyword(keyword);
         }
 
+		private void Fade(string inspector, string keyword)
+		{
+			bool toggle = oldKeyWords.Contains(keyword);
+			bool ini = toggle;
+
+			GUIContent effectNameLabel = new GUIContent();
+			effectNameLabel.tooltip = keyword + " (C#)";
+			effectNameLabel.text = effectCount + ".Fade";
+			toggle = EditorGUILayout.BeginToggleGroup(effectNameLabel, toggle);
+
+			effectCount++;
+			if (ini != toggle) Save();
+			if (toggle)
+			{
+				targetMat.EnableKeyword(keyword);
+				EditorGUILayout.BeginVertical(propertiesStyle);
+				{
+					DrawProperty(7);
+					DrawProperty(178);
+
+					DrawProperty(8);
+					DrawProperty(9);
+					DrawProperty(10);
+					DrawProperty(11);
+
+					DrawProperty(12);
+					DrawProperty(179);
+					
+					DrawProperty(13);
+				}
+				EditorGUILayout.EndVertical();
+			}
+			else
+			{
+				targetMat.DisableKeyword(keyword);
+			}
+
+			EditorGUILayout.EndToggleGroup();
+		}
+
         private void Outline(string inspector, string keyword)
         {
             bool toggle = oldKeyWords.Contains(keyword);
@@ -308,6 +350,7 @@ namespace AllIn1SpriteShader
                         DrawProperty(19);
                         DrawProperty(20);
                         DrawProperty(21);
+						DrawProperty(180);
                     }
 
                     DrawLine(Color.grey, 1, 3);
@@ -318,6 +361,7 @@ namespace AllIn1SpriteShader
                         DrawProperty(23);
                         DrawProperty(24);
                         DrawProperty(25);
+						DrawProperty(181);
                     }
 
                     DrawLine(Color.grey, 1, 3);
@@ -750,8 +794,14 @@ namespace AllIn1SpriteShader
                     if(multModeOn) GUILayout.Label("Overlay is set to multiplicative mode", smallLabelStyle);
                     else GUILayout.Label("Overlay is set to additive mode", smallLabelStyle);
 
-                    for(int i = 160; i <= 163; i++) DrawProperty(i);
-                    for(int i = 170; i <= 171; i++) DrawProperty(i);
+					DrawProperty(160);
+					DrawProperty(183);
+					DrawProperty(161);
+					DrawProperty(162);
+					DrawProperty(163);
+
+
+					for(int i = 170; i <= 171; i++) DrawProperty(i);
                 }
                 EditorGUILayout.EndVertical();
             }

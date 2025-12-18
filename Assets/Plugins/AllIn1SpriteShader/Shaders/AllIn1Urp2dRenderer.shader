@@ -2,7 +2,7 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 {
     Properties
     {
-        _MainTex ("Main Texture", 2D) = "white" {}	//0
+        [NoScaleOffset]_MainTex ("Main Texture", 2D) = "white" {}	//0
 		_Color("Main Color", Color) = (1,1,1,1)		//1
 		_Alpha("General Alpha",  Range(0,1)) = 1	//2
 
@@ -11,12 +11,12 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
         _GlowGlobal("Global Glow Intensity", Range(1,100)) = 1 //5
 		[NoScaleOffset] _GlowTex("Glow Texture", 2D) = "white" {} //6
 
-		_FadeTex("Fade Texture", 2D) = "white" {} //7
+		[NoScaleOffset]_FadeTex("Fade Texture", 2D) = "white" {} //7
 		_FadeAmount("Fade Amount",  Range(-0.1,1)) = -0.1 //8
 		_FadeBurnWidth("Fade Burn Width",  Range(0,1)) = 0.025 //9
 		_FadeBurnTransition("Burn Transition",  Range(0.01,0.5)) = 0.075 //10
 		_FadeBurnColor("Fade Burn Color", Color) = (1,1,0,1) //11
-		_FadeBurnTex("Fade Burn Texture", 2D) = "white" {} //12
+		[NoScaleOffset]_FadeBurnTex("Fade Burn Texture", 2D) = "white" {} //12
 		_FadeBurnGlow("Fade Burn Glow",  Range(1,250)) = 2//13
         
 		_OutlineColor("Outline Base Color", Color) = (1,1,1,1) //14
@@ -26,15 +26,15 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 		_OutlinePixelWidth("Outline Base Pixel Width", Int) = 1 //18
 		
 		[Space]
-		_OutlineTex("Outline Texture", 2D) = "white" {} //19
+		[NoScaleOffset]_OutlineTex("Outline Texture", 2D) = "white" {} //19
 		_OutlineTexXSpeed("Texture scroll speed X", Range(-50,50)) = 10 //20
 		_OutlineTexYSpeed("Texture scroll speed Y", Range(-50,50)) = 0 //21
 
         [Space]
-		_OutlineDistortTex("Outline Distortion Texture", 2D) = "white" {} //22
+		[NoScaleOffset]_OutlineDistortTex("Outline Distortion Texture", 2D) = "white" {} //22
 		_OutlineDistortAmount("Outline Distortion Amount", Range(0,2)) = 0.5 //23
 		_OutlineDistortTexXSpeed("Distortion scroll speed X", Range(-50,50)) = 5 //24
-		_OutlineDistortTexYSpeed("Distortion scroll speed Y", Range(-50,50)) = 5 //25
+		_OutlineDistortTexYSpeed("Distortion scroll speed Y", Range(-50,50)) = 5 //25 
     	
     	_AlphaOutlineColor("Color", Color) = (1, 1, 1, 1) //26
 		_AlphaOutlineGlow("Outline Glow", Range(1,100)) = 5 //27
@@ -150,7 +150,7 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 
 		_ZoomUvAmount("Zoom Amount", Range(0.1, 5)) = 0.5 //108
 
-		_DistortTex("Distortion Texture", 2D) = "white" {} //109
+		[NoScaleOffset]_DistortTex("Distortion Texture", 2D) = "white" {} //109
 		_DistortAmount("Distortion Amount", Range(0,2)) = 0.5 //110
 		_DistortTexXSpeed("Scroll speed X", Range(-50,50)) = 5 //111
 		_DistortTexYSpeed("Scroll speed Y", Range(-50,50)) = 5 //112
@@ -217,7 +217,7 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 
         [AllIn1ShaderGradient] _ColorRampTexGradient("Color ramp Gradient", 2D) = "white" {} //159
 
-		_OverlayTex("Overlay Texture", 2D) = "white" {} //160
+		[NoScaleOffset]_OverlayTex("Overlay Texture", 2D) = "white" {} //160
 		_OverlayColor("Overlay Color", Color) = (1, 1, 1, 1) //161
 		_OverlayGlow("Overlay Glow", Range(0,25)) = 1 // 162
 		_OverlayBlend("Overlay Blend", Range(0, 1)) = 1 // 163
@@ -239,6 +239,20 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 		_NormalStrength("Normal Strength",  Range(0,10)) = 1 //175
 		[Toggle()] _GlowAffectLight("Glow affects light", Float) = 1 //176
 
+
+		/**/
+		_MainTex_ScaleAndTiling("Main Tex - Scale and Tiling", Vector) = (1, 1, 0, 0) //177
+		_FadeTex_ScaleAndTiling("Fade Tex - Scale and Tiling", Vector) = (1, 1, 0, 0) //178
+		_FadeBurnTex_ScaleAndTiling("Fade Burn Tex - Scale and Tiling", Vector) = (1, 1, 0, 0) //179
+		_OutlineTex_ScaleAndTiling("Outline Tex - Scale and Tiling", Vector) = (1, 1, 0, 0) //180 
+		_OutlineDistortTex_ScaleAndTiling("Outline Distort Tex - Scale and Tiling", Vector) = (1, 1, 0, 0) //181
+		_DistortTex_ScaleAndTiling("Distort Tex - Scale and Tiling", Vector) = (1, 1, 0, 0) //182
+		_OverlayTex_ScaleAndTiling("Overlay Tex - Scale and Tiling", Vector) = (1, 1, 0, 0) //183
+
+		_GlitchSpeed("Glitch Speed", Range(0.0, 100)) = 20 //184
+		/**/
+
+
         _ZTestMode ("Z Test Mode", Float) = 4
     	_CullingOption ("Culling Option", float) = 0
 
@@ -250,11 +264,12 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
     	_EditorDrawers("Editor Drawers", Int) = 14
     }
 
-    SubShader
+
+	SubShader
     {
 		PackageRequirements
 		{
-			"com.unity.render-pipelines.universal" : "12.0"
+			"com.unity.render-pipelines.universal" : "[12.0,17.2]"
 		}
 
 		Tags {"Queue" = "Transparent" "RenderType" = "Transparent" "RenderPipeline" = "UniversalPipeline" "CanUseSpriteAtlas" = "True" "PreviewType" = "Plane" "RenderPipeline"="UniversalPipeline"}
@@ -265,7 +280,100 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 
         Pass //Main Light Shapes pass
         {
-			Tags { "LightMode" = "Universal2D" "RenderPipeline" = "UniversalPipeline"}
+			Name "Main Pass"
+			Tags { "LightMode" = "Universal2D" }
+
+            HLSLPROGRAM
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/Core2D.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/LightingUtility.hlsl"
+			
+			#pragma multi_compile_instancing
+            #pragma multi_compile USE_SHAPE_LIGHT_TYPE_0 __
+            #pragma multi_compile USE_SHAPE_LIGHT_TYPE_1 __
+            #pragma multi_compile USE_SHAPE_LIGHT_TYPE_2 __
+            #pragma multi_compile USE_SHAPE_LIGHT_TYPE_3 __
+
+			#if USE_SHAPE_LIGHT_TYPE_0
+			SHAPE_LIGHT(0)
+			#endif
+
+			#if USE_SHAPE_LIGHT_TYPE_1
+			SHAPE_LIGHT(1)
+			#endif
+
+			#if USE_SHAPE_LIGHT_TYPE_2
+			SHAPE_LIGHT(2)
+			#endif
+
+			#if USE_SHAPE_LIGHT_TYPE_3
+			SHAPE_LIGHT(3)
+			#endif
+
+			#pragma vertex CombinedShapeLightVertex 
+            #pragma fragment CombinedShapeLightFragment
+
+
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_Structs.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_CommonFunctions.hlsl"
+			#include_with_pragmas "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_ShaderFeatures.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_Properties.hlsl"
+
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/CombinedShapeLightShared.hlsl"
+
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_VertexPass.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_FragmentPass.hlsl"
+
+
+
+
+            ENDHLSL
+        }
+
+		Pass //Normal Mapping
+        {
+			Name "Normal Pass"
+            Tags { "LightMode" = "NormalsRendering" }
+			
+			HLSLPROGRAM
+			#pragma vertex NormalsRenderingVertex
+            #pragma fragment NormalsRenderingFragment
+			
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/Core2D.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/NormalsRenderingShared.hlsl"
+
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_Structs.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_CommonFunctions.hlsl"
+			#include_with_pragmas "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_ShaderFeatures.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_Properties.hlsl"
+			
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_NormalsRenderingVertexPass.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_NormalsRenderingFragmentPass.hlsl"
+
+			ENDHLSL
+		}
+    }
+
+
+    SubShader
+    {
+		PackageRequirements
+		{
+			"com.unity.render-pipelines.universal" : "17.3"
+		}
+
+		Tags {"Queue" = "Transparent" "RenderType" = "Transparent" "RenderPipeline" = "UniversalPipeline" "CanUseSpriteAtlas" = "True" "PreviewType" = "Plane" "RenderPipeline"="UniversalPipeline"}
+		Blend [_MySrcMode] [_MyDstMode]
+		Cull Off
+		ZWrite [_ZWrite]
+		ZTest [_ZTestMode]
+
+        Pass //Main Light Shapes pass
+        {
+			Name "Main Pass"
+
+			Tags { "LightMode" = "Universal2D" }
 
             HLSLPROGRAM
 			#pragma vertex CombinedShapeLightVertex 
@@ -288,15 +396,14 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_VertexPass.hlsl"
 			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_FragmentPass.hlsl"
 
-
-
-
             ENDHLSL
         }
 
 		Pass //Normal Mapping
         {
-            Tags { "LightMode" = "NormalsRendering" "RenderPipeline"="UniversalPipeline"}
+			Name "Normal Pass"
+
+            Tags { "LightMode" = "NormalsRendering" }
 			
 			HLSLPROGRAM
 			#pragma vertex NormalsRenderingVertex
@@ -315,6 +422,37 @@ Shader "AllIn1SpriteShader/AllIn1Urp2dRenderer"
 
 			ENDHLSL
 		}
+
+		Pass //Universal Forward
+        {
+			Name "Universal Forward"
+
+			Tags { "LightMode" = "UniversalForward" "Queue"="Transparent" "RenderType"="Transparent"}
+
+            HLSLPROGRAM
+			#pragma vertex CombinedShapeLightVertex 
+            #pragma fragment CombinedShapeLightFragment
+			
+			#pragma multi_compile_instancing
+            #pragma multi_compile USE_SHAPE_LIGHT_TYPE_0 __
+            #pragma multi_compile USE_SHAPE_LIGHT_TYPE_1 __
+            #pragma multi_compile USE_SHAPE_LIGHT_TYPE_2 __
+            #pragma multi_compile USE_SHAPE_LIGHT_TYPE_3 __
+
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/Core2D.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/CombinedShapeLightShared.hlsl"
+
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_Structs.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_CommonFunctions.hlsl"
+			#include_with_pragmas "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_ShaderFeatures.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_Properties.hlsl"
+
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_VertexPass.hlsl"
+			#include "ShaderLibrary/2DRenderer/AllIn1SpriteShader_2DRenderer_FragmentPass.hlsl"
+
+            ENDHLSL
+        }
     }
 
 	FallBack "AllIn1SpriteShader/AllIn1SpriteShader"

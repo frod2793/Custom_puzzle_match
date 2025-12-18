@@ -2,8 +2,8 @@
 #define ALLIN1SPRITESHADER_2DRENDERER_PROPERTIES
 
 CBUFFER_START(UnityPerMaterial)
-	half4 _MainTex_ST, _MainTex_TexelSize, _Color;
-	//float4 _MainTex_ScaleAndTiling;
+	half4 /*_MainTex_ST, _MainTex_TexelSize,*/ _Color;
+	float4 _MainTex_ScaleAndTiling;
 				 
 	half _Alpha;
 	half _LitAmount;
@@ -37,7 +37,8 @@ CBUFFER_START(UnityPerMaterial)
 			
 	half _ZoomUvAmount;
 			 
-	half4 _FadeBurnColor, _FadeTex_ST, _FadeBurnTex_ST;
+	half4 _FadeBurnColor; /*_FadeTex_ST,*/ /*_FadeBurnTex_ST*/
+	float4 _FadeTex_ScaleAndTiling, _FadeBurnTex_ScaleAndTiling;
 	half _FadeAmount, _FadeBurnWidth, _FadeBurnTransition, _FadeBurnGlow;
 			
 	half _TextureScrollXSpeed, _TextureScrollYSpeed;
@@ -50,13 +51,16 @@ CBUFFER_START(UnityPerMaterial)
 	half _OutlineAlpha, _OutlineGlow, _OutlineWidth;
 	int _OutlinePixelWidth;
 
-	half4 _OutlineTex_ST;
+	//half4 _OutlineTex_ST;
+	float4 _OutlineTex_ScaleAndTiling;
 	half _OutlineTexXSpeed, _OutlineTexYSpeed;
 			
-	half4 _OutlineDistortTex_ST;
+	//half4 _OutlineDistortTex_ST;
+	float4 _OutlineDistortTex_ScaleAndTiling;
 	half _OutlineDistortTexXSpeed, _OutlineDistortTexYSpeed, _OutlineDistortAmount;
 			
-	half4 _DistortTex_ST;
+	//half4 _DistortTex_ST;
+	float4 _DistortTex_ScaleAndTiling;
 	half _DistortTexXSpeed, _DistortTexYSpeed, _DistortAmount;
 			
 	half _WarpStrength, _WarpSpeed, _WarpScale;
@@ -127,7 +131,8 @@ CBUFFER_START(UnityPerMaterial)
 			
 	half _Contrast, _Brightness;
 			
-	half4 _OverlayTex_ST;
+	//half4 _OverlayTex_ST;
+	float4 _OverlayTex_ScaleAndTiling;
 	float4 _OverlayColor;
 	half _OverlayGlow, _OverlayBlend, _OverlayTextureScrollXSpeed, _OverlayTextureScrollYSpeed;
 

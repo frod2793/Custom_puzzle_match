@@ -157,7 +157,6 @@ namespace Match3
 
             if (m_currentLevelData == null) return;
             
-            // ... (이후 로직 동일)
             
             // [제거] 여기서 GetWorldPositionFromGrid 호출 시 m_gridManager가 없어서 NRE 발생함.
             // InitializeOptimizationCache()로 이동.

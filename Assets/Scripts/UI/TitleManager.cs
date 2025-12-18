@@ -1,11 +1,10 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using TMPro;
 using DG.Tweening;
 using Cysharp.Threading.Tasks;
 using System;
-
+using System.Collections.Generic;
 using EasyTransition; // EasyTransition 사용
 using EPOOutline;
 
@@ -16,45 +15,57 @@ namespace Match3
     /// </summary>
     public class TitleManager : MonoBehaviour
     {
-        [Header("데이터베이스 및 UI 프리팹")]
-        [SerializeField] private LevelDatabase m_levelDatabase;
+        [Header("1. 필수 설정 (Database & Prefabs)")] [SerializeField]
+        private LevelDatabase m_LevelDatabase;
+
         [SerializeField] private GameObject m_levelButtonPrefab;
         [SerializeField] private Transform m_levelButtonContainer;
 
-        [Header("타이틀 화면")]
-        [SerializeField] private GameObject m_titlePanel;
+        [Header("2. 타이틀 화면 (Title Screen)")] [SerializeField]
+        private GameObject m_titlePanel;
+
         [SerializeField] private Button m_boardButton;
         private RectTransform m_boardButtonRect;
         [SerializeField] private Outlinable m_arrowOutline;
         [SerializeField] private Outlinable m_boardButtonOutline;
 
+        [Header("공통 UI (Common)")] [SerializeField]
+        private Button m_backButton;
+
         [SerializeField] private TransitionSettings m_titleTransitionSettings;
 
-        [Header("로비 모드 버튼")]
-        [SerializeField] private Button m_squareModeButton;
+        [Header("3. 로비 화면 - 보드 모드 선택 (Board Mode)")] [SerializeField]
+        private Button m_squareModeButton;
+
         [SerializeField] private Outlinable m_squareModeOutline;
         [SerializeField] private Button m_hexagonModeButton;
         [SerializeField] private Outlinable m_hexagonModeOutline;
 
-        [Header("UI 패널 (계층 구조)")]
-        [SerializeField] private GameObject m_lobbyPanel;
+        [Header("4. 플레이 모드 화면 - 방식 선택 (Play Mode)")] [SerializeField]
+        private Button m_stageModeButton;
+        [SerializeField] private Outlinable m_stageModeOutline;
+        [SerializeField] private Button m_infiniteModeButton;
+        [SerializeField] private Outlinable m_infiniteModeOutline;
+
+        [Header("5. UI 패널 관리 (Panels)")] [SerializeField]
+        private GameObject m_lobbyPanel;
+
         [SerializeField] private GameObject m_boardModePanel;
         [SerializeField] private GameObject m_playModePanel;
         [SerializeField] private GameObject m_stageSelectPanel;
 
-        private const string k_GameSceneName = "Game";
+        private const string k_GameSceneName = "Match3_Game";
         private Sequence m_rotationSequence;
         private Sequence m_outlineSequence;
-        
+
         // 메모리 최적화: 오브젝트 풀링을 위한 리스트
-        private System.Collections.Generic.List<LevelButton> m_pooledLevelButtons = new System.Collections.Generic.List<LevelButton>();
+        private List<LevelButton> m_pooledLevelButtons = new List<LevelButton>();
 
-        // 고급 최적화: 레벨 데이터 캐싱 (검색 속도 O(1))
-        private System.Collections.Generic.Dictionary<GridType, System.Collections.Generic.List<int>> m_cachedLevelIndices;
-
+        // 캐싱 데이터
+        private Dictionary<GridType, List<int>> m_cachedLevelIndices;
         private void Start()
         {
-            if (m_levelDatabase == null || m_levelButtonPrefab == null || m_levelButtonContainer == null)
+            if (m_LevelDatabase == null|| m_levelButtonPrefab == null || m_levelButtonContainer == null)
             {
                 Debug.LogError("<b>[치명적 오류]</b> TitleManager의 필수 데이터가 할당되지 않았습니다!", this);
                 return;
@@ -65,17 +76,23 @@ namespace Match3
 
             // 초기 상태: 타이틀 화면 표시
             ShowPanel(m_titlePanel);
-            
+
             // 버튼 이벤트 연결 및 RectTransform 가져오기
             if (m_boardButton != null)
             {
                 m_boardButtonRect = m_boardButton.GetComponent<RectTransform>();
-                
+
                 m_boardButton.onClick.RemoveAllListeners();
                 m_boardButton.onClick.AddListener(() => OnTitleBoardClicked().Forget());
             }
 
-            // 타이틀 애니메이션 시작
+            // 뒤로가기 버튼 설정
+            if (m_backButton != null)
+            {
+                m_backButton.onClick.RemoveAllListeners();
+                m_backButton.onClick.AddListener(OnBackButtonPressed);
+            }
+
             // 타이틀 애니메이션 시작
             AnimateBoardButton();
 
@@ -107,12 +124,13 @@ namespace Match3
             // 1. 회전 애니메이션
             m_rotationSequence = DOTween.Sequence();
             m_rotationSequence.AppendInterval(2.5f);
-            m_rotationSequence.Append(m_boardButtonRect.DORotate(new Vector3(0, 0, -90), 0.5f, RotateMode.LocalAxisAdd).SetEase(Ease.OutBack));
+            m_rotationSequence.Append(m_boardButtonRect.DORotate(new Vector3(0, 0, -90), 0.5f, RotateMode.LocalAxisAdd)
+                .SetEase(Ease.OutBack));
             m_rotationSequence.SetLoops(-1, LoopType.Incremental);
 
             // 2. 아웃라인 애니메이션
             m_outlineSequence = DOTween.Sequence();
-            
+
             float pulseDuration = 1.0f;
 
             if (m_arrowOutline != null)
@@ -127,12 +145,16 @@ namespace Match3
 
             if (m_arrowOutline != null || m_boardButtonOutline != null)
             {
-                 m_outlineSequence.SetLoops(-1, LoopType.Yoyo);
+                m_outlineSequence.SetLoops(-1, LoopType.Yoyo);
             }
 
             // 모드 버튼 아웃라인도 있으면 같이 실행
             if (m_squareModeOutline != null) SetupPulseAnimation(m_squareModeOutline.OutlineParameters, pulseDuration);
-            if (m_hexagonModeOutline != null) SetupPulseAnimation(m_hexagonModeOutline.OutlineParameters, pulseDuration);
+            if (m_hexagonModeOutline != null)
+                SetupPulseAnimation(m_hexagonModeOutline.OutlineParameters, pulseDuration);
+            if (m_stageModeOutline != null) SetupPulseAnimation(m_stageModeOutline.OutlineParameters, pulseDuration);
+            if (m_infiniteModeOutline != null)
+                SetupPulseAnimation(m_infiniteModeOutline.OutlineParameters, pulseDuration);
         }
 
         private void SetupPulseAnimation(Outlinable.OutlineProperties targetParams, float duration)
@@ -152,7 +174,7 @@ namespace Match3
         public async UniTaskVoid OnTitleBoardClicked()
         {
             if (m_boardButton != null) m_boardButton.interactable = false;
-            
+
             // 회전 애니메이션 중지
             if (m_rotationSequence != null) m_rotationSequence.Pause();
             if (m_outlineSequence != null) m_outlineSequence.Pause();
@@ -162,8 +184,8 @@ namespace Match3
             {
                 // UniTask 비동기 대기 (콜백 제거)
                 await m_boardButtonRect.DOPunchScale(Vector3.one * 0.1f, 0.2f, 10, 1)
-                                       .ToUniTask(cancellationToken: this.GetCancellationTokenOnDestroy());
-                
+                    .ToUniTask(cancellationToken: this.GetCancellationTokenOnDestroy());
+
                 // 2. EasyTransition 시작
                 StartTitleTransition();
             }
@@ -184,8 +206,8 @@ namespace Match3
             var transitionManager = TransitionManager.Instance();
             if (transitionManager == null)
             {
-                 onCutPointReached?.Invoke();
-                 return;
+                onCutPointReached?.Invoke();
+                return;
             }
 
             // 이벤트 핸들러 래핑 (일회성 구독)
@@ -201,21 +223,19 @@ namespace Match3
 
         private void StartTitleTransition()
         {
-             // 공통 헬퍼 메서드 사용 (중복 제거)
-             PlayTransition(m_titleTransitionSettings, () =>
-             {
-                 if (m_titlePanel != null) m_titlePanel.SetActive(false);
-                 ShowPanel(m_boardModePanel);
-             });
+            // 공통 헬퍼 메서드 사용 (중복 제거)
+            PlayTransition(m_titleTransitionSettings, () =>
+            {
+                if (m_titlePanel != null) m_titlePanel.SetActive(false);
+                ShowPanel(m_boardModePanel);
+            });
         }
 
         private void StartBackToTitleTransition()
         {
-             // 공통 헬퍼 메서드 사용 (중복 제거)
-             PlayTransition(m_titleTransitionSettings, GoBackToTitleImmediate);
+            // 공통 헬퍼 메서드 사용 (중복 제거)
+            PlayTransition(m_titleTransitionSettings, GoBackToTitleImmediate);
         }
-
-
 
         #endregion
 
@@ -246,6 +266,18 @@ namespace Match3
                 m_hexagonModeButton.onClick.RemoveAllListeners();
                 m_hexagonModeButton.onClick.AddListener(OnHexagonModeSelected);
             }
+
+            if (m_stageModeButton != null)
+            {
+                m_stageModeButton.onClick.RemoveAllListeners();
+                m_stageModeButton.onClick.AddListener(OnStageModeSelected);
+            }
+
+            if (m_infiniteModeButton != null)
+            {
+                m_infiniteModeButton.onClick.RemoveAllListeners();
+                m_infiniteModeButton.onClick.AddListener(OnInfiniteModeSelected);
+            }
         }
 
         #endregion
@@ -255,6 +287,7 @@ namespace Match3
         public void OnStageModeSelected()
         {
             GameSettings.CurrentPlayMode = PlayMode.Stage;
+
             PopulateLevelButtons(); // 현재 보드 모드에 맞는 레벨만 로드
             ShowPanel(m_stageSelectPanel);
         }
@@ -264,30 +297,30 @@ namespace Match3
         /// </summary>
         private void CacheLevelData()
         {
-            m_cachedLevelIndices = new System.Collections.Generic.Dictionary<GridType, System.Collections.Generic.List<int>>();
 
-            // Enum의 모든 값에 대해 리스트 초기화
-            foreach (GridType type in System.Enum.GetValues(typeof(GridType)))
-            {
-                m_cachedLevelIndices[type] = new System.Collections.Generic.List<int>();
-            }
+            m_cachedLevelIndices = new Dictionary<GridType, List<int>>();
 
-            // 데이터베이스 순회하며 분류
-            for (int i = 0; i < m_levelDatabase.Levels.Count; i++)
+            // 1. Square Levels 캐싱
+            List<int> squareIndices = new List<int>();
+            for (int i = 0; i < m_LevelDatabase.Squarelevels.Count; i++)
             {
-                GridType type = m_levelDatabase.Levels[i].GridType;
-                if (m_cachedLevelIndices.ContainsKey(type))
-                {
-                    m_cachedLevelIndices[type].Add(i);
-                }
+                squareIndices.Add(i);
             }
+            m_cachedLevelIndices[GridType.Square] = squareIndices;
+
+            // 2. Hexagon Levels 캐싱
+            List<int> hexagonIndices = new List<int>();
+            for (int i = 0; i < m_LevelDatabase.HaxagonLevels.Count; i++)
+            {
+                hexagonIndices.Add(i);
+            }
+            m_cachedLevelIndices[GridType.Hexagon] = hexagonIndices;
         }
 
         public void OnInfiniteModeSelected()
         {
             GameSettings.CurrentPlayMode = PlayMode.Infinite;
-            // 무한 모드는 레벨 선택 없이 바로 게임 시작 (추후 구현에 따라 로직 변경 가능)
-            // 현재는 임시로 -1 또는 특정 무한 모드 전용 ID를 넘길 수도 있음
+            // 무한 모드는 레벨 선택 없이 바로 게임 시작
             SceneManager.LoadScene(k_GameSceneName);
         }
 
@@ -314,21 +347,29 @@ namespace Match3
         }
 
 
-
         private void GoBackToTitleImmediate()
         {
             ShowPanel(m_titlePanel);
-            
+
             if (m_boardButton != null) m_boardButton.interactable = true;
             AnimateBoardButton(); // 애니메이션 재시작
         }
 
         private void ShowPanel(GameObject panelToShow)
         {
-            if (m_titlePanel) m_titlePanel.SetActive(panelToShow == m_titlePanel);
-            
-            // 로비 패널 그룹(BoardMode, PlayMode, StageSelect) 중 하나가 활성화되면 로비 패널도 켭니다.
-            bool isLobbySubPanel = (panelToShow == m_boardModePanel || panelToShow == m_playModePanel || panelToShow == m_stageSelectPanel);
+            if (m_titlePanel)
+            {
+                m_titlePanel.SetActive(panelToShow == m_titlePanel);
+            }
+
+            if (m_backButton != null)
+            {
+                // 타이틀 패널이 켜져있으면 뒤로가기 버튼 숨김, 그 외에는 표시
+                m_backButton.gameObject.SetActive(panelToShow != m_titlePanel);
+            }
+
+            // 로비(BoardMode)만 로비 패널로 간주하고, 플레이 모드/스테이지 선택은 별도로 처리
+            bool isLobbySubPanel = (panelToShow == m_boardModePanel);
             if (m_lobbyPanel) m_lobbyPanel.SetActive(isLobbySubPanel);
 
             if (m_boardModePanel) m_boardModePanel.SetActive(panelToShow == m_boardModePanel);
@@ -355,16 +396,15 @@ namespace Match3
             // 캐싱된 데이터 사용 (검색 속도 O(1))
             if (m_cachedLevelIndices == null) CacheLevelData(); // 안전장치
 
-            System.Collections.Generic.List<int> levelIndices = null;
-            if (m_cachedLevelIndices.TryGetValue(targetGridType, out levelIndices))
+            if (m_cachedLevelIndices.TryGetValue(targetGridType, out List<int> levelIndices))
             {
                 int activeCount = 0;
-                
+
                 // 해당 타입의 레벨만 순회
                 foreach (int levelIndex in levelIndices)
                 {
                     LevelButton levelButton;
-    
+
                     if (activeCount < m_pooledLevelButtons.Count)
                     {
                         levelButton = m_pooledLevelButtons[activeCount];
@@ -374,18 +414,18 @@ namespace Match3
                     {
                         GameObject buttonGO = Instantiate(m_levelButtonPrefab, m_levelButtonContainer);
                         levelButton = buttonGO.GetComponent<LevelButton>();
-                        
+
                         if (levelButton != null)
                         {
                             m_pooledLevelButtons.Add(levelButton);
                         }
                         else
                         {
-                            activeCount++; // 실패해도 카운트는 증가시켜야 무한루프 방지 (논리적으론 continue)
+                            activeCount++; 
                             continue;
                         }
                     }
-                    
+
                     levelButton.Setup(levelIndex, levelIndex + 1, OnLevelButtonPressed);
                     activeCount++;
                 }

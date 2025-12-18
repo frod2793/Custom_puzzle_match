@@ -24,7 +24,7 @@ FragmentDataNormalsPass NormalsRenderingVertex(VertexDataNormalsPass v)
 	#else
 	o.vertex = TransformObjectToHClip(v.vertex.xyz);
 	#endif
-    o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+    o.uv = /*TRANSFORM_TEX(v.uv, _MainTex);*/v.uv * _MainTex_ScaleAndTiling.xy + _MainTex_ScaleAndTiling.zw;
 	o.color = v.color;
 
 	half2 center = half2(0.5, 0.5);
@@ -47,15 +47,15 @@ FragmentDataNormalsPass NormalsRenderingVertex(VertexDataNormalsPass v)
 	#endif
 
 	#if OUTTEX_ON
-	o.uvOutTex = TRANSFORM_TEX(v.uv, _OutlineTex);
+	o.uvOutTex = CUSTOM_TRANSFORM_TEX(v.uv, _OutlineTex_ScaleAndTiling);
 	#endif
 
 	#if OUTDIST_ON
-	o.uvOutDistTex = TRANSFORM_TEX(v.uv, _OutlineDistortTex);
+	o.uvOutDistTex = CUSTOM_TRANSFORM_TEX(v.uv, _OutlineDistortTex_ScaleAndTiling);
 	#endif
 
 	#if DISTORT_ON
-	o.uvDistTex = TRANSFORM_TEX(v.uv, _DistortTex);
+	o.uvDistTex = CUSTOM_TRANSFORM_TEX(v.uv, _DistortTex_ScaleAndTiling);
 	#endif
 
     o.normalWS = -GetViewForwardDir();

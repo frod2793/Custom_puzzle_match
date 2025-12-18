@@ -35,9 +35,9 @@ namespace Match3.Editor
                 FieldInfo levelDatabaseField = typeof(Match3.GameBoard).GetField("m_levelDatabase", BindingFlags.NonPublic | BindingFlags.Instance);
                 LevelDatabase levelDatabase = levelDatabaseField?.GetValue(gameBoard) as LevelDatabase;
 
-                if (levelDatabase != null && levelDatabase.Levels != null && levelDatabase.Levels.Count > 0)
+                if (levelDatabase != null && levelDatabase.Squarelevels != null && levelDatabase.Squarelevels.Count > 0)
                 {
-                    string[] levelOptions = levelDatabase.Levels
+                    string[] levelOptions = levelDatabase.Squarelevels
                         .Select((level, index) => $"ID: {index} - {(level != null ? level.name : "NULL")}")
                         .ToArray();
 

@@ -15,6 +15,7 @@ MonoBehaviour:
   sceneDatas_byGuid:
     keys:
     - 7051f5aadeb7bc645874da04bf68288c
+    - 4a7533b50beab49f4b65c8ebec82e349
     values:
     - goDatas_byGlobalId:
         keys:
@@ -29,6 +30,9 @@ MonoBehaviour:
           iconNameOrGuid: 
           isIconRecursive: 0
           isColorRecursive: 0
+    - goDatas_byGlobalId:
+        keys: []
+        values: []
   bookmarks: []
   bookmarkedScenePaths:
   - Assets/Scenes/Title_Scene.unity

@@ -10,18 +10,35 @@ namespace Match3
     public class LevelDatabase : ScriptableObject
     {
         [SerializeField]
-        private List<LevelData> m_levels;
+        private List<LevelData> m_Squarelevels;
+        
+        [SerializeField]
+        private List<LevelData> m_HaxagonLevels;
 
-        public IReadOnlyList<LevelData> Levels => m_levels;
+        public IReadOnlyList<LevelData> Squarelevels => m_Squarelevels;
+        public IReadOnlyList<LevelData> HaxagonLevels => m_HaxagonLevels;
 
         public LevelData GetLevel(int levelID)
         {
-            if (levelID < 0 || levelID >= m_levels.Count)
+            if (GameSettings.CurrentBoardMode == BoardMode.Square)
             {
-                Debug.LogError($"[LevelDatabase] 유효하지 않은 레벨 ID입니다: {levelID}");
-                return null;
+                if (levelID < 0 || levelID >= m_Squarelevels.Count)
+                {
+                    Debug.LogError($"[LevelDatabase] 유효하지 않은 스퀘어 레벨 ID입니다: {levelID}");
+                    return null;
+                }
+                return m_Squarelevels[levelID];
             }
-            return m_levels[levelID];
+            else if (GameSettings.CurrentBoardMode == BoardMode.Hexagon)
+            {
+                if (levelID < 0 || levelID >= m_HaxagonLevels.Count)
+                {
+                    Debug.LogError($"[LevelDatabase] 유효하지 않은 핵사 레벨 ID입니다: {levelID}");
+                    return null;
+                }
+                return m_HaxagonLevels[levelID];
+            }
+            return null;
         }
     }
 }

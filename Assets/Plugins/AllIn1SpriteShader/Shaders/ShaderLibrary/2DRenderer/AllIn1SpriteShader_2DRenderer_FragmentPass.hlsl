@@ -6,17 +6,22 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
     UNITY_SETUP_INSTANCE_ID(i);
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
     half randomSeed = UNITY_ACCESS_INSTANCED_PROP(Props, _RandomSeed);
-            	
+            
+	float texWidth;
+	float texHeight;
+	_MainTex.GetDimensions(texWidth, texHeight);
+	float4 texelSize = float4(1.0 / texWidth, 1 / texHeight, texWidth, texHeight);
+
 	float2 uvRect = i.uv;
 	half2 center = half2(0.5, 0.5);
 	#if ATLAS_ON
 	center = half2((_MaxXUV + _MinXUV) / 2.0, (_MaxYUV + _MinYUV) / 2.0);
 	uvRect = half2((i.uv.x - _MinXUV) / (_MaxXUV - _MinXUV), (i.uv.y - _MinYUV) / (_MaxYUV - _MinYUV));
 	#endif
-	half2 centerTiled = half2(center.x *  _MainTex_ST.x, center.y *  _MainTex_ST.y);
+	half2 centerTiled = half2(center.x *  _MainTex_ScaleAndTiling.x, center.y *  _MainTex_ScaleAndTiling.y);
 
 	#if CLIPPING_ON
-	half2 tiledUv = half2(i.uv.x / _MainTex_ST.x, i.uv.y / _MainTex_ST.y);
+	half2 tiledUv = half2(i.uv.x / _MainTex_ScaleAndTiling.x, i.uv.y / _MainTex_ScaleAndTiling.y);
 	#if ATLAS_ON
 	tiledUv = half2((tiledUv.x - _MinXUV) / (_MaxXUV - _MinXUV), (tiledUv.y - _MinYUV) / (_MaxYUV - _MinYUV));
 	#endif
@@ -27,7 +32,7 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#endif
 
     #if RADIALCLIPPING_ON
-	half2 tiledUv2 = half2(i.uv.x / _MainTex_ST.x, i.uv.y / _MainTex_ST.y);
+	half2 tiledUv2 = half2(i.uv.x / _MainTex_ScaleAndTiling.x, i.uv.y / _MainTex_ScaleAndTiling.y);
 	#if ATLAS_ON
 	tiledUv2 = half2((tiledUv2.x - _MinXUV) / (_MaxXUV - _MinXUV), (tiledUv2.y - _MinYUV) / (_MaxYUV - _MinYUV));
 	#endif
@@ -59,7 +64,7 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 
 	#if POLARUV_ON
 	i.uv = half2(atan2(i.uv.y, i.uv.x) / (2.0f * 3.141592653589f), length(i.uv));
-	i.uv *= _MainTex_ST.xy;
+	i.uv *= _MainTex_ScaleAndTiling.xy;
 	#endif
 
 	#if TWISTUV_ON
@@ -67,15 +72,15 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	_TwistUvPosX = ((_MaxXUV - _MinXUV) * _TwistUvPosX) + _MinXUV;
 	_TwistUvPosY = ((_MaxYUV - _MinYUV) * _TwistUvPosY) + _MinYUV;
 	#endif
-	half2 tempUv = i.uv - half2(_TwistUvPosX *  _MainTex_ST.x, _TwistUvPosY *  _MainTex_ST.y);
-	_TwistUvRadius *= (_MainTex_ST.x + _MainTex_ST.y) / 2;
+	half2 tempUv = i.uv - half2(_TwistUvPosX *  _MainTex_ScaleAndTiling.x, _TwistUvPosY *  _MainTex_ScaleAndTiling.y);
+	_TwistUvRadius *= (_MainTex_ScaleAndTiling.x + _MainTex_ScaleAndTiling.y) / 2;
 	half percent = (_TwistUvRadius - length(tempUv)) / _TwistUvRadius;
 	half theta = percent * percent * (2.0 * sin(_TwistUvAmount)) * 8.0;
 	half s = sin(theta);
 	half c = cos(theta);
 	half beta = max(sign(_TwistUvRadius - length(tempUv)), 0.0);
 	tempUv = half2(dot(tempUv, half2(c, -s)), dot(tempUv, half2(s, c))) * beta +	tempUv * (1 - beta);
-	tempUv += half2(_TwistUvPosX *  _MainTex_ST.x, _TwistUvPosY *  _MainTex_ST.y);
+	tempUv += half2(_TwistUvPosX *  _MainTex_ScaleAndTiling.x, _TwistUvPosY *  _MainTex_ScaleAndTiling.y);
 	i.uv = tempUv;
 	#endif
 
@@ -130,7 +135,7 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#endif
 
     #if WARP_ON
-    half2 warpUv = half2(i.uv.x / _MainTex_ST.x, i.uv.y / _MainTex_ST.y);
+    half2 warpUv = half2(i.uv.x / _MainTex_ScaleAndTiling.x, i.uv.y / _MainTex_ScaleAndTiling.y);
 	#if ATLAS_ON
 	warpUv = half2((warpUv.x - _MinXUV) / (_MaxXUV - _MinXUV), (warpUv.y - _MinYUV) / (_MaxYUV - _MinYUV));
 	#endif
@@ -142,7 +147,7 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#endif
 
 	#if WAVEUV_ON
-	float2 uvWave = half2(_WaveX *  _MainTex_ST.x, _WaveY *  _MainTex_ST.y) - i.uv;
+	float2 uvWave = half2(_WaveX *  _MainTex_ScaleAndTiling.x, _WaveY *  _MainTex_ScaleAndTiling.y) - i.uv;
     uvWave %= 1;
 	#if ATLAS_ON
 	uvWave = half2(_WaveX, _WaveY) - uvRect;
@@ -154,8 +159,8 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#endif
 
 	#if ROUNDWAVEUV_ON
-	half xWave = ((0.5 * _MainTex_ST.x) - uvRect.x);
-	half yWave = ((0.5 * _MainTex_ST.y) - uvRect.y) * (_MainTex_TexelSize.w / _MainTex_TexelSize.z);
+	half xWave = ((0.5 * _MainTex_ScaleAndTiling.x) - uvRect.x);
+	half yWave = ((0.5 * _MainTex_ScaleAndTiling.y) - uvRect.y) * (texelSize.w / texelSize.z);
 	half ripple = -sqrt(xWave*xWave + yWave* yWave);
 	i.uv += sin((ripple + (_Time.y + randomSeed) * (_RoundWaveSpeed/10.0)) / 0.015) * (_RoundWaveStrength/10.0);
 	#endif
@@ -185,7 +190,7 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#endif
 
 	#if PIXELATE_ON
-    half aspectRatio = _MainTex_TexelSize.x / _MainTex_TexelSize.y;
+    half aspectRatio = texelSize.x / texelSize.y;
 	half2 pixelSize = float2(_PixelateSize, _PixelateSize * aspectRatio);
 	i.uv = floor(i.uv * pixelSize) / pixelSize;
 	#endif
@@ -200,9 +205,9 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#if GLITCH_ON
 	half2 uvGlitch = uvRect;
 	uvGlitch.y -= 0.5;
-	half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed), 3.0) * _GlitchAmount
-		* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed), 3.0);
-	col = ALLIN1_SAMPLE_TEXTURE_2D(_MainTex, i.uv + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed), 0)) * i.color;
+	half lineNoise = pow(rand2(floor(uvGlitch * half2(24., 19.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0) * _GlitchAmount
+		* pow(rand2(floor(uvGlitch * half2(38., 14.) * _GlitchSize) * 4.0, randomSeed, _GlitchSpeed), 3.0);
+	col = ALLIN1_SAMPLE_TEXTURE_2D(_MainTex, i.uv + half2(lineNoise * 0.02 * rand2(half2(2.0, 1), randomSeed, _GlitchSpeed), 0)) * i.color;
 	#endif
 
 	#if CHROMABERR_ON
@@ -265,8 +270,8 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#endif
 
 	#if INNEROUTLINE_ON
-	half3 innerT = abs(GetPixel(0, _InnerOutlineThickness, i.uv, _MainTex, sampler_MainTex, _MainTex_TexelSize) - GetPixel(0, -_InnerOutlineThickness, i.uv, _MainTex, sampler_MainTex, _MainTex_TexelSize));
-	innerT += abs(GetPixel(_InnerOutlineThickness, 0, i.uv, _MainTex, sampler_MainTex, _MainTex_TexelSize) - GetPixel(-_InnerOutlineThickness, 0, i.uv, _MainTex, sampler_MainTex, _MainTex_TexelSize));
+	half3 innerT = abs(GetPixel(0, _InnerOutlineThickness, i.uv, _MainTex, sampler_MainTex, texelSize) - GetPixel(0, -_InnerOutlineThickness, i.uv, _MainTex, sampler_MainTex, texelSize));
+	innerT += abs(GetPixel(_InnerOutlineThickness, 0, i.uv, _MainTex, sampler_MainTex, texelSize) - GetPixel(-_InnerOutlineThickness, 0, i.uv, _MainTex, sampler_MainTex, texelSize));
 	#if !ONLYINNEROUTLINE_ON
 	innerT = (innerT / 2.0) * col.a * _InnerOutlineAlpha;
 	col.rgb += length(innerT) * _InnerOutlineColor.rgb * _InnerOutlineGlow;
@@ -282,14 +287,14 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	#endif
 
 	#if GRADIENT_ON
-	half2 tiledUvGrad = half2(uvRect.x / _MainTex_ST.x, uvRect.y / _MainTex_ST.y);
+	half2 tiledUvGrad = half2(uvRect.x / _MainTex_ScaleAndTiling.x, uvRect.y / _MainTex_ScaleAndTiling.y);
 	#if GRADIENT2COL_ON
 	_GradTopRightCol = _GradTopLeftCol;
 	_GradBotRightCol = _GradBotLeftCol;
 	#endif
 	#if RADIALGRADIENT_ON
 	half radialDist = 1 - length(tiledUvGrad - half2(0.5, 0.5));
-	radialDist *= (_MainTex_TexelSize.w / _MainTex_TexelSize.z);
+	radialDist *= (texelSize.w / texelSize.z);
 	radialDist = saturate(_GradBoostX * radialDist);
 	half4 gradientResult = lerp(_GradTopLeftCol, _GradBotLeftCol, radialDist);
 	#else
@@ -373,7 +378,7 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
     half2 overlayUvs = i.uv;
     overlayUvs.x += ((_Time.y + randomSeed) * _OverlayTextureScrollXSpeed) % 1;
 	overlayUvs.y += ((_Time.y + randomSeed) * _OverlayTextureScrollYSpeed) % 1;
-	half4 overlayCol = ALLIN1_SAMPLE_TEXTURE_2D(_OverlayTex, TRANSFORM_TEX(overlayUvs, _OverlayTex));
+	half4 overlayCol = ALLIN1_SAMPLE_TEXTURE_2D(_OverlayTex, CUSTOM_TRANSFORM_TEX(overlayUvs, _OverlayTex_ScaleAndTiling));
 	overlayCol.rgb *= _OverlayColor.rgb * _OverlayGlow;
 	#if !OVERLAYMULT_ON
 	overlayCol.rgb *= overlayCol.a * _OverlayColor.rgb * _OverlayColor.a * _OverlayBlend;
@@ -387,9 +392,9 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	//OUTLINE-------------------------------------------------------------
 	#if OUTBASE_ON
 		#if OUTBASEPIXELPERF_ON
-		half2 destUv = half2(_OutlinePixelWidth * _MainTex_TexelSize.x, _OutlinePixelWidth * _MainTex_TexelSize.y);
+		half2 destUv = half2(_OutlinePixelWidth * texelSize.x, _OutlinePixelWidth * texelSize.y);
 		#else
-		half2 destUv = half2(_OutlineWidth * _MainTex_TexelSize.x * 200, _OutlineWidth * _MainTex_TexelSize.y * 200);
+		half2 destUv = half2(_OutlineWidth * texelSize.x * 200, _OutlineWidth * texelSize.y * 200);
 		#endif
 
 		#if OUTDIST_ON
@@ -448,8 +453,8 @@ half4 CombinedShapeLightFragment(v2f i) : SV_Target
 	//-----------------------------------------------------------------------------
 
 	#if FADE_ON
-	half2 tiledUvFade1= TRANSFORM_TEX(i.uv, _FadeTex);
-	half2 tiledUvFade2 = TRANSFORM_TEX(i.uv, _FadeBurnTex);
+	half2 tiledUvFade1= CUSTOM_TRANSFORM_TEX(i.uv, _FadeTex_ScaleAndTiling);
+	half2 tiledUvFade2 = CUSTOM_TRANSFORM_TEX(i.uv, _FadeBurnTex_ScaleAndTiling);
 	#if ATLAS_ON
 	tiledUvFade1 = half2((tiledUvFade1.x - _MinXUV) / (_MaxXUV - _MinXUV), (tiledUvFade1.y - _MinYUV) / (_MaxYUV - _MinYUV));
 	tiledUvFade2 = half2((tiledUvFade2.x - _MinXUV) / (_MaxXUV - _MinXUV), (tiledUvFade2.y - _MinYUV) / (_MaxYUV - _MinYUV));

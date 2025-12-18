@@ -65,11 +65,7 @@ half rand(half offset, half2 seed) {
 	return (frac(sin(dot(seed, half2(12.9898, 78.233))) * 43758.5453) + offset) % 1.0;
 }
 
-half rand2(half offset, half2 seed) {
-	return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12.), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
-}
-
-half rand2(half offset, half2 seed, half speed) {
+half rand2(half2 seed, half offset, half speed) {
 	return (frac(sin(dot(seed * floor(50 + (_Time.x % 1.0) * 12. * speed), half2(127.1, 311.7))) * 43758.5453123) + offset) % 1.0;
 }
 
